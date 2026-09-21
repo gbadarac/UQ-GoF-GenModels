@@ -14,7 +14,13 @@ import LRTGOFutils_v2 as lrt
 import GENutils as gen
 
 # ===================================================================
-# One-model kernel GoF — multiplicative NPLM exp-tilt (Sean Option 1).
+# SINGLE SParKer-KERNEL MODEL — component-profiling GoF, multiplicative NPLM
+# exp-tilt (Sean Option 1).
+#
+# WHAT THIS PROFILES: the K internal kernel COMPONENTS of ONE Sparker model.
+# This is a DIFFERENT granularity from LRT.py, which profiles the M ensemble
+# MEMBERS (wifi weights); LRT.py's SCENARIO=1model is an ensemble-of-ONE (single
+# member, w=[1.0]) and does NOT do this component-level fit.
 #
 # SCOPE: SParKer kernels pipeline ONLY (loads GMM centroids/coeffs/widths and
 # builds a Gaussian-mixture density). It does NOT handle the NF pipeline.
