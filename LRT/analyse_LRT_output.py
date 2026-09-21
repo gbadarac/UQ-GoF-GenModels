@@ -3,7 +3,7 @@ analyse_LRT_output.py
 ---------------------
 Unified analysis script for LRT results — works for both Sparker kernels and
 normalizing flow model types. Reads the standard output format produced by LRT.py
-(and LRT_1model_profiling.py). --results_dir IS the run-tag directory itself; it
+(and LRT_kernels_1model_profiling.py). --results_dir IS the run-tag directory itself; it
 contains the calibration/ and test/ subtrees:
 
     <results_dir>/                                        (= the run-tag dir)

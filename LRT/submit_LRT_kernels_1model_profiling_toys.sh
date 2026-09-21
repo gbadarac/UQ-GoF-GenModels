@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=LRT_1model_profiling
+#SBATCH --job-name=LRT_kernels_1model_profiling
 #SBATCH --array=0-99
 #SBATCH --time=08:00:00
 #SBATCH --mem=12G
@@ -13,8 +13,21 @@
 
 set -euo pipefail
 
-# SCOPE: SParKer kernels pipeline ONLY (MODEL_DIR points at Sparker_kernels
-# outputs). This test does NOT apply to the NF pipeline.
+# =====================================================================
+# SINGLE SParKer-KERNEL MODEL — component profiling GoF test.
+#
+# WHAT THIS IS: takes ONE Sparker-kernel model and profiles the K internal
+# kernel COMPONENTS that build its Gaussian-mixture density (DEN = EM refit of
+# the K component weights to the data; NUM = multiplicative exp-tilt). It is the
+# component-level analogue of "wifi", applied inside a single model.
+#
+# SCOPE: SParKer kernels pipeline ONLY. MODEL_DIR must point at Sparker_kernels
+# outputs (GMM centroids/coeffs/widths); it does NOT handle the NF pipeline.
+#
+# NOT THE ENSEMBLE TEST: this is a different granularity from LRT.py. LRT.py
+# profiles the M ENSEMBLE MEMBERS (wifi weights), and its SCENARIO=1model is an
+# ensemble-of-ONE (single member, w=[1.0], no component-level fit) — NOT this.
+# =====================================================================
 
 # -------------------------
 # Environment
@@ -41,7 +54,7 @@ export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
 # Paths / config (EDIT THESE)
 # -------------------------
 REPO_ROOT="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
-PY="$REPO_ROOT/LRT/LRT_1model_profiling.py"
+PY="$REPO_ROOT/LRT/LRT_kernels_1model_profiling.py"
 
 # Train_Ensembles output with config.json + seed*/ histories
 MODEL_DIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_kernels_SparKer_models1_L5_K80_M300_Nboot100000_lr0.05_clip_10000000_joint_norm"
@@ -78,7 +91,7 @@ FIRSTSEED=12345
 # LAM_PERT = L2 ridge on the tilt coeffs b. Must be > 0: lam_pert=0 separates (tilt
 # runaway under the null). lam_pert=1.0 keeps max|b|<1 (effective DOF ~35 2D / ~96 4D).
 # CLIP_B is NON-functional (its L-BFGS-B path does not converge) — use LAM_PERT.
-#   sbatch --export=ALL,LAM_PERT=0.1,CALIBRATION=1 submit_LRT_1model_profiling_toys.sh
+#   sbatch --export=ALL,LAM_PERT=0.1,CALIBRATION=1 submit_LRT_kernels_1model_profiling_toys.sh
 LAM_PERT=${LAM_PERT:-1.0}
 CLIP_B=${CLIP_B:-}                # empty => no box on b
 
@@ -87,7 +100,7 @@ CLIP_B=${CLIP_B:-}                # empty => no box on b
 # -------------------------
 # M and sigma drive test power. NPLM guideline: M >= sqrt(N)=316 for 100k. Each
 # (M,sigma) is a NEW null -> recalibrate; keep sigma FIXED across a calib+test pair.
-#   sbatch --export=ALL,N_KERNELS=500,KERNEL_SIGMA=0.5,CALIBRATION=1 submit_LRT_1model_profiling_toys.sh
+#   sbatch --export=ALL,N_KERNELS=500,KERNEL_SIGMA=0.5,CALIBRATION=1 submit_LRT_kernels_1model_profiling_toys.sh
 N_KERNELS=${N_KERNELS:-100}
 KERNEL_SIGMA=${KERNEL_SIGMA:-0.3}
 
