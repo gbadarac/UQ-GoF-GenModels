@@ -6,13 +6,14 @@
 # L6/blk8/h128/bins10, validated end-to-end by the single-seed dry run).
 # Use --array=0 for a single-seed dry run.
 #SBATCH --array=0-255
-# per-array-task budget (one flow member); the biggest 4D grid config finished <25 min
-# at 24G, so 6h/32G is a safe per-member envelope and stays valid when you scale --array.
+# per-array-task budget (one flow member). Measured MaxRSS on the 4D members is ~2.2G,
+# so 8G is ~3-4x headroom (was 32G, a ~15x over-allocation the cluster admins flagged).
+# 6h walltime is loose too (members finish in ~10-25 min) but only --mem reserves node RAM.
 #SBATCH --time=06:00:00
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --mem=32G
+#SBATCH --mem=8G
 #SBATCH --gres=gpu:1
 #SBATCH --output=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/logs/nf_%A_%a.out
 #SBATCH --error=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/logs/nf_%A_%a.err
