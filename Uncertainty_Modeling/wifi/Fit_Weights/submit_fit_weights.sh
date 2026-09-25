@@ -7,8 +7,9 @@
 #SBATCH --account=gpu_gres
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
-#SBATCH -o /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%j.out
-#SBATCH -e /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%j.err
+#SBATCH --array=0-9        # 10 ensemble CHOICES for the 10-fit campaign (RNG_SEED = array task id); override with --array=0 for a single fit
+#SBATCH -o /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%A_%a.out
+#SBATCH -e /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%A_%a.err
 
 set -euo pipefail
 
@@ -21,14 +22,14 @@ export LD_LIBRARY_PATH="/work/gbadarac/miniforge3/envs/nplm_env/lib${LD_LIBRARY_
 
 # ─── Mode toggles (EDIT THESE) ───────────────────────────────────────────────
 MODEL_TYPE=nf          # kernels | nf
-NDIM=4                 # 2 | 4   (nf only; kernels is 2D here)
+NDIM=${NDIM:-4}        # 2 | 4   (nf only; kernels is 2D here); override per-job: sbatch --export=ALL,NDIM=2,...
 SELECTION=uniform      # how the N_WIFI members are chosen:
                        #   uniform    : draw N_WIFI seeds at random from all members  (kernels + nf)
                        #   stratified : (worst,medium,best) draw per M from the marginal ranking (nf)
                        #   pinned     : first N_WIFI of the ranking, best->worst      (nf)
                        #   default    : seed000.. / model_000.. in order (no seed list)
 N_WIFI=${N_WIFI:-128}  # ensemble size; per-job: sbatch --export=ALL,N_WIFI=8 ...
-RNG_SEED=${RNG_SEED:-0}  # draw seed for uniform/stratified (reproducible; change for another draw)
+RNG_SEED="${SLURM_ARRAY_TASK_ID:-${RNG_SEED:-0}}"  # ensemble CHOICE index c: array task id (0..9), else env/0
 
 # ─── The ONLY model-type-specific block: env + paths + member layout ─────────
 if [[ "$MODEL_TYPE" == "kernels" ]]; then
@@ -46,13 +47,13 @@ elif [[ "$MODEL_TYPE" == "nf" ]]; then
     MEMBER_GLOB="model_*"
     RANKING_FILE="$REPO_ROOT/$FW/results_fit_weights_NF_uniform/2d_toymodel/seed_ranking_marginal.txt"  # 2D-toy NF ranking (stratified/pinned only; uniform ignores it)
     if [[ "$NDIM" == "2" ]]; then
-        ENSEMBLE_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_128_4_4_64_8"
+        ENSEMBLE_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_512_4_4_64_8"
         DATA_PATH="$REPO_ROOT/data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_train.npy"
     elif [[ "$NDIM" == "4" ]]; then
         # 4D JetClass QCD embedding, 256-member NF ensemble (per-member model_*/model.pth).
         # SAME 3-level depth as 2D (.../<N>_dim/<dataset>/<ensemble>) so the GROUP derivation
         # below reads "4_dim" and results land under .../4d_embedding/.
-        ENSEMBLE_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_seeds_256_6_8_128_10"
+        ENSEMBLE_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_seeds_512_6_8_128_10"
         DATA_PATH="$REPO_ROOT/data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_train.npy"
     else
         echo "Unknown NDIM=$NDIM for nf"; exit 1
@@ -72,7 +73,7 @@ case "$dim_dir" in
     4_dim) GROUP=4d_embedding ;;
     *) echo "cannot derive result group from ensemble dir dim component '$dim_dir'"; exit 1 ;;
 esac
-OUT_DIR="$REPO_ROOT/$FW/results_fit_weights_${MODEL_TAG}_${SELECTION}/${GROUP}/$(basename "$ENSEMBLE_DIR")_${dataset_tag}_ensemblecomponents${N_WIFI}"
+OUT_DIR="$REPO_ROOT/$FW/results_fit_weights_${MODEL_TAG}_${SELECTION}/${GROUP}/$(basename "$ENSEMBLE_DIR")_${dataset_tag}_ensemblecomponents${N_WIFI}/choice${RNG_SEED}"
 conda activate "$CONDA_ENV"
 mkdir -p "$REPO_ROOT/$FW/logs" "$OUT_DIR"
 cd "$REPO_ROOT"
@@ -95,6 +96,7 @@ if [[ "$SELECTION" != "default" ]]; then
     echo "[select] $SELECTION M=$N_WIFI rng_seed=$RNG_SEED -> $MEMBER_SEEDS"
     SINGLE_SEED="${MEMBER_SEEDS%%,*}"                 # first seed (for N_WIFI=1)
     [[ "$N_WIFI" != "1" ]] && SEED_ARGS="--member_seeds $MEMBER_SEEDS"
+    printf '%s\n' "$MEMBER_SEEDS" > "$OUT_DIR/member_seeds.txt"   # traceability: this choice's M member indices (from rng_seed=RNG_SEED, pool=512)
 fi
 
 # ─── Run ─────────────────────────────────────────────────────────────────────

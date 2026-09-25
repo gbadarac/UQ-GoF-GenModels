@@ -341,7 +341,7 @@ if not args.no_plots:
     wifi_plots_dir.mkdir(exist_ok=True)
     diag_plots_dir = out_dir / "plots"
     diag_plots_dir.mkdir(exist_ok=True)
-    feature_names = [f"Feature {i+1}" for i in range(ndim)]
+    feature_names = [f"feature {i+1}" for i in range(ndim)]
 
     # Simple diagnostics
     fig, ax = plt.subplots()
@@ -426,7 +426,7 @@ if not args.no_plots:
             # any D >= 3: Monte-Carlo marginal (dense grid infeasible)
             plot_ensemble_marginals_nd(
                 f_i_models, x_data_plot, w_final_t, cov_np,
-                feature_names, str(wifi_plots_dir),
+                feature_names, str(wifi_plots_dir), n_components=M,
             )
 
     print(f"Plots saved to {wifi_plots_dir} and {diag_plots_dir}", flush=True)
