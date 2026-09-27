@@ -62,6 +62,14 @@ FIRSTSEED=12345
 # select_member_seeds.py --rng_seed <same as the wifi fit>. Empty = first-k (legacy).
 MEMBER_SEEDS=${MEMBER_SEEDS:-}
 
+# CHOICE: 10-fit ensemble-choice index (0..9), used ONLY by the *_uniform scenarios. It
+# selects the choice<CHOICE>/ subdir of the wifi ensemblecomponents<M> dir (that choice's own
+# member_seeds.txt + w_i_fitted + cov_w) AND adds a choice<CHOICE>/ level at the top of OUT_BASE
+# so the 10 fits store side-by-side and the pooled 25/75 plot can glob choice*/<run_tag>/. The
+# driver (run_nf_scan.sh) reads choice<CHOICE>/member_seeds.txt and passes it as MEMBER_SEEDS.
+# Empty = legacy single-draw layout (non-uniform scenarios).
+CHOICE=${CHOICE:-}
+
 # ─── Numerator knobs (EDIT / OVERRIDE AT SUBMIT TIME) ────────────────
 # The numerator is the NPLM exp-tilt  f_num = f_ens*exp(Σ b_j G_j)/Z  (log-space, clean chi2;
 # matches LRT_one_model + classifier). FIX_WIFI_WEIGHTS=true => frozen w (convex); default
@@ -155,38 +163,42 @@ case "$MODEL:$SCENARIO" in
     ;;
 
   nf:ens_2d_uniform)
-    # NF campaign on the UNIFORM-selected wifi ensembles (results_fit_weights_NF_uniform). The
-    # ensemble members are a NON-first-k random subset, so the driver MUST pass MEMBER_SEEDS
-    # (resolved via select_member_seeds.py --rng_seed 0) so LRT.py loads the SAME members, in the
-    # SAME order, that the wifi fit used. Single model (ENS=1) = the pinned NF single (seed 100):
-    # driver passes MEMBER_SEEDS=100; the ensemblecomponents1 wifi is ignored (M=1 synthesizes w).
+    # 10-fit NF campaign (2D toy) on the 512-flow pool. CHOICE (0..9) picks one of the 10
+    # ensemble choices: that choice's members (member_seeds.txt), self-calibrated weights and
+    # covariance ALL live in ensemblecomponents<M>/choice<CHOICE>/, and outputs go under a
+    # matching choice<CHOICE>/ so the 10 fits sit side-by-side for the pooled 25/75 plot. The
+    # driver (run_nf_scan.sh) reads choice<CHOICE>/member_seeds.txt and passes it as MEMBER_SEEDS
+    # so LRT.py loads the SAME members, in the SAME order, that the wifi fit used. Single model
+    # (ENS=1) = one flow drawn from the pool per choice (driver passes MEMBER_SEEDS); no wifi
+    # files (M=1 synthesizes w=[1.0]).
     NENSEMBLE=${ENS:-128}
-    NF_TRAIN_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_128_4_4_64_8"
+    NF_TRAIN_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_512_4_4_64_8"
     ARCH_CONFIG="$NF_TRAIN_DIR/architecture_config.json"
-    NF_WIFI_DIR="$REPO_ROOT/Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/2d_toymodel/N_100000_dim_2_seeds_128_4_4_64_8_2d_bimodal_gaussian_heavy_tail_ensemblecomponents${NENSEMBLE}"
-    W_PATH="$NF_WIFI_DIR/w_i_fitted.npy"
-    W_COV_PATH="$NF_WIFI_DIR/cov_w.npy"
     TARGET_TRUTH="2d_gmm_skew"   # observed: draw fresh from the analytic truth each toy (no data file)
-    OUT_BASE="$REPO_ROOT/LRT/results/nf/2d_uniform_ensemble"
+    OUT_BASE="$REPO_ROOT/LRT/results/nf/2d_uniform_ensemble/choice${CHOICE}"
+    if [[ "$NENSEMBLE" -gt 1 ]]; then
+      NF_WIFI_DIR="$REPO_ROOT/Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/2d_toymodel/N_100000_dim_2_seeds_512_4_4_64_8_2d_bimodal_gaussian_heavy_tail_ensemblecomponents${NENSEMBLE}/choice${CHOICE}"
+      W_PATH="$NF_WIFI_DIR/w_i_fitted.npy"
+      W_COV_PATH="$NF_WIFI_DIR/cov_w.npy"
+    fi
     ;;
 
   nf:ens_4d_uniform)
-    # 4D JetClass QCD embedding campaign on the UNIFORM-selected wifi ensembles
-    # (results_fit_weights_NF_uniform/4d_embedding). Members are a NON-first-k random subset
-    # drawn with --n_members 256, so the driver MUST pass MEMBER_SEEDS (resolved via
-    # select_member_seeds.py --n_members 256 --rng_seed 0) so LRT.py loads the SAME members,
-    # in the SAME order, that the wifi fit used. Single model (ENS=1) = the pinned uniform
-    # single (seed 133); NENSEMBLE=1 -> LRT.py synthesizes w=[1.0] (ensemblecomponents1 wifi
-    # ignored). No analytic truth (real embedding) -> calib=0 bootstraps the held-out
-    # (non-training) holdout data_heldout_qcd.npy (1.9M events, disjoint from data_train).
+    # 10-fit NF campaign (4D JetClass QCD embedding) on the 512-flow pool; CHOICE mechanics as
+    # in ens_2d_uniform (choice<CHOICE>/ holds member_seeds.txt + w_i_fitted + cov_w; outputs go
+    # under a matching choice<CHOICE>/). Single model (ENS=1) = one flow from the pool per choice
+    # (driver passes MEMBER_SEEDS; M=1 synthesizes w=[1.0]). No analytic truth (real embedding)
+    # -> calib=0 bootstraps the held-out data_heldout_qcd.npy (disjoint from data_train).
     NENSEMBLE=${ENS:-64}
-    NF_TRAIN_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_seeds_256_6_8_128_10"
+    NF_TRAIN_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_seeds_512_6_8_128_10"
     ARCH_CONFIG="$NF_TRAIN_DIR/architecture_config.json"
-    NF_WIFI_DIR="$REPO_ROOT/Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/4d_embedding/N_100000_dim_4_seeds_256_6_8_128_10_4d_embedding_qcd_ensemblecomponents${NENSEMBLE}"
-    W_PATH="$NF_WIFI_DIR/w_i_fitted.npy"
-    W_COV_PATH="$NF_WIFI_DIR/cov_w.npy"
     TARGET_DATA="$REPO_ROOT/data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_heldout_qcd.npy"
-    OUT_BASE="$REPO_ROOT/LRT/results/nf/4d_uniform_ensemble"
+    OUT_BASE="$REPO_ROOT/LRT/results/nf/4d_uniform_ensemble/choice${CHOICE}"
+    if [[ "$NENSEMBLE" -gt 1 ]]; then
+      NF_WIFI_DIR="$REPO_ROOT/Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/4d_embedding/N_100000_dim_4_seeds_512_6_8_128_10_4d_embedding_qcd_ensemblecomponents${NENSEMBLE}/choice${CHOICE}"
+      W_PATH="$NF_WIFI_DIR/w_i_fitted.npy"
+      W_COV_PATH="$NF_WIFI_DIR/cov_w.npy"
+    fi
     ;;
 
   *)
@@ -194,6 +206,13 @@ case "$MODEL:$SCENARIO" in
     echo "  implemented -> kernels: 1model_2d | ens_2d ; nf: ens_2d | ens_2d_uniform | ens_4d_uniform"
     exit 1 ;;
 esac
+
+# The 10-fit uniform scenarios REQUIRE CHOICE (0..9): it indexes the wifi choice<k>/ subdir and
+# the choice<k>/ output level. Guard against an empty CHOICE landing outputs in a ".../choice/"
+# dir or reading a nonexistent wifi path. (Non-uniform/legacy scenarios don't set it.)
+if [[ "$SCENARIO" == *_uniform && -z "$CHOICE" ]]; then
+    echo "ERROR: SCENARIO=$SCENARIO requires CHOICE=<0..9> (the 10-fit ensemble-choice index)"; exit 1
+fi
 
 # A single model (NENSEMBLE=1) has no wifi weights to profile, so only the frozen fit is valid.
 if [[ "$NENSEMBLE" -eq 1 ]]; then
@@ -233,20 +252,28 @@ export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
 
 # ─── Run ─────────────────────────────────────────────────────────────
 mkdir -p "$OUT_BASE" "$REPO_ROOT/LRT/results/logs"
-
-TOY_ID=${SLURM_ARRAY_TASK_ID}
-SEED=$((FIRSTSEED + TOY_ID + 1))
-
 cd "$REPO_ROOT"
-echo "[$(date)] MODEL_TYPE=${MODEL_TYPE}, CALIBRATION=${CALIBRATION}, Task=${TOY_ID}, seed=${SEED}, host=${HOSTNAME}"
 
-CMD=("$PYBIN" -u "$PY"
+# Toy batching: ONE SLURM array task runs TOYS_PER_JOB toys sequentially. This keeps the total
+# job count far below the cluster MaxJobCount — one-job-per-toy is ~5x the cap and hogs the whole
+# shared job table. The array index maps to a contiguous toy_id range [START, END]; N_TOYS (total
+# toys for this cell,calib) clamps the final partial batch. toy_id -> SEED is unchanged, so the
+# results are IDENTICAL to the unbatched run. Defaults (TOYS_PER_JOB=1) reproduce old behaviour.
+TOYS_PER_JOB=${TOYS_PER_JOB:-1}
+N_TOYS=${N_TOYS:-}
+ARRAY_IDX=${SLURM_ARRAY_TASK_ID:-0}
+START=$(( ARRAY_IDX * TOYS_PER_JOB ))
+END=$(( START + TOYS_PER_JOB - 1 ))
+if [[ -n "$N_TOYS" && "$END" -ge "$N_TOYS" ]]; then END=$(( N_TOYS - 1 )); fi
+
+echo "[$(date)] MODEL_TYPE=${MODEL_TYPE}, CALIBRATION=${CALIBRATION}, array_idx=${ARRAY_IDX}, toys ${START}..${END} (batch=${TOYS_PER_JOB}, N_TOYS=${N_TOYS:-unset}), host=${HOSTNAME}"
+
+# Base command shared by every toy in this task (everything EXCEPT the per-toy --toy_id / -s).
+BASE_CMD=("$PYBIN" -u "$PY"
   --model_type    "$MODEL_TYPE"
   --out_base      "$OUT_BASE"
   -n              "$NTEST"
   -e              "$NENSEMBLE"
-  -s              "$SEED"
-  --toy_id        "$TOY_ID"
   -c              "$CALIBRATION"
   --n_kernels     "$N_KERNELS"
   --kernel_sigma  "$KERNEL_SIGMA"
@@ -256,34 +283,36 @@ CMD=("$PYBIN" -u "$PY"
   --grid_pad      "$GRID_PAD"
   --n_ref         "$N_REF"
 )
-
 # wifi weights: only for a real ensemble (NENSEMBLE>1); a single model synthesizes them
-[[ -n "$W_PATH" ]] && CMD+=(--w_path "$W_PATH" --w_cov_path "$W_COV_PATH")
-
+[[ -n "$W_PATH" ]] && BASE_CMD+=(--w_path "$W_PATH" --w_cov_path "$W_COV_PATH")
 if [[ "$MODEL_TYPE" == "kernels" ]]; then
-    CMD+=(--ensemble_dir "$ENSEMBLE_DIR" --seed_format "seed%03d")
+    BASE_CMD+=(--ensemble_dir "$ENSEMBLE_DIR" --seed_format "seed%03d")
 elif [[ "$MODEL_TYPE" == "nf" ]]; then
-    CMD+=(--nf_train_dir "$NF_TRAIN_DIR" --arch_config "$ARCH_CONFIG")
+    BASE_CMD+=(--nf_train_dir "$NF_TRAIN_DIR" --arch_config "$ARCH_CONFIG")
 fi
-
-[[ -n "$CLIP_B" ]] && CMD+=(--clip_b "$CLIP_B")
-[[ -n "$MEMBER_SEEDS" ]] && CMD+=(--member_seeds "$MEMBER_SEEDS")
-[[ "$W_COV_SCALE" != "1.0" ]] && CMD+=(--w_cov_scale "$W_COV_SCALE")
-[[ "$FIX_WIFI_WEIGHTS" == "true" ]] && CMD+=(--fix_wifi_weights)
-
-# calib=1 null is self-contained (SIR-from-q). calib=0 observed: 2D toy draws FRESH from
-# the analytic truth each toy (--target_truth: genuine oversampling, no bootstrap, no
-# replace=True); 4D (no truth) bootstraps the finite --target_data holdout.
+[[ -n "$CLIP_B" ]] && BASE_CMD+=(--clip_b "$CLIP_B")
+[[ -n "$MEMBER_SEEDS" ]] && BASE_CMD+=(--member_seeds "$MEMBER_SEEDS")
+[[ "$W_COV_SCALE" != "1.0" ]] && BASE_CMD+=(--w_cov_scale "$W_COV_SCALE")
+[[ "$FIX_WIFI_WEIGHTS" == "true" ]] && BASE_CMD+=(--fix_wifi_weights)
+# calib=1 null is self-contained (SIR-from-q). calib=0 observed: 2D toy draws FRESH from the
+# analytic truth each toy (--target_truth: genuine oversampling); 4D bootstraps --target_data.
 if [[ "$CALIBRATION" -eq 0 ]]; then
-  if [[ -n "$TARGET_TRUTH" ]]; then
-    CMD+=(--target_truth "$TARGET_TRUTH")
-  else
-    CMD+=(--target_data "$TARGET_DATA")
-  fi
+  if [[ -n "$TARGET_TRUTH" ]]; then BASE_CMD+=(--target_truth "$TARGET_TRUTH")
+  else BASE_CMD+=(--target_data "$TARGET_DATA"); fi
 fi
 
-echo "Running: ${CMD[*]}"
-"${CMD[@]}"
-RC=$?
-echo "[$(date)] Task ${TOY_ID} finished with exit code ${RC}"
+# Run every toy in the batch sequentially. A failing toy is logged and does NOT abort the rest
+# (the `if` exempts it from set -e); the task exit code is the worst toy's, so a fully-clean batch
+# exits 0 and any failure is visible in sacct.
+RC=0
+for TOY_ID in $(seq "$START" "$END"); do
+  SEED=$((FIRSTSEED + TOY_ID + 1))
+  CMD=("${BASE_CMD[@]}" --toy_id "$TOY_ID" -s "$SEED")
+  echo "[$(date)] --- toy ${TOY_ID} (seed ${SEED}) ---"
+  echo "Running: ${CMD[*]}"
+  if "${CMD[@]}"; then rc=0; else rc=$?; fi
+  echo "[$(date)] toy ${TOY_ID} exit ${rc}"
+  [[ "$rc" -ne 0 ]] && RC=$rc
+done
+echo "[$(date)] array_idx ${ARRAY_IDX} (toys ${START}..${END}) finished; worst exit ${RC}"
 exit $RC

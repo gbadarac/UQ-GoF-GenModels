@@ -1,4 +1,4 @@
-import gc, os, json, argparse, sys, ctypes, math, datetime
+import gc, os, re, json, argparse, sys, ctypes, math, datetime
 from pathlib import Path
 import torch
 import numpy as np
@@ -205,8 +205,14 @@ if args.z_mode != 'sample':
 if args.nensemble == 1:
     wifi_tag = "single"          # single model = ensemble-of-one, no wifi fit
 else:
-    wifi_tag = '_'.join(os.path.basename(os.path.dirname(
-        os.path.abspath(args.w_cov_path))).split('_')[-2:])
+    # The informative tokens live on the ensemblecomponents<M> dir. In the 10-fit layout the
+    # cov sits in a choice<k>/ subdir (choice is an OUT_BASE axis, NOT part of the run_tag), so
+    # skip a choice<k> parent -> the run_tag is IDENTICAL across the 10 choices, and the pooled
+    # plot can glob choice*/<same run_tag>/ to gather a cell's fits.
+    wifi_parent = os.path.dirname(os.path.abspath(args.w_cov_path))
+    if re.fullmatch(r'choice\d+', os.path.basename(wifi_parent)):
+        wifi_parent = os.path.dirname(wifi_parent)
+    wifi_tag = '_'.join(os.path.basename(wifi_parent).split('_')[-2:])
 run_tag += "_wifi_%s" % wifi_tag
 
 # Null TYPE in the path (group terminology, aligned with the paper): frozen w = the plug-in

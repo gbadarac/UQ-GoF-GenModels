@@ -31,9 +31,11 @@ test T — i.e. this p50 line is exactly the `p-value` number analyse_LRT_output
 already prints per run. The bands are the extra piece (they need the full per-toy
 p-value distribution, which the single-run script does not emit).
 
-Caveat 1: the test toys are BOOTSTRAP resamples of one fixed target, so both the
-IQR band AND the median CI are bootstrap spreads (correlated draws) — they
-UNDERESTIMATE the true experiment-to-experiment spread. Label them as such.
+Caveat 1: with the 10-fit NF layout (choice*/ subdirs) the band is POOLED over the ensemble
+choices, so it captures the fit-to-fit (model-choice) spread AND the test-toy spread — the
+honest experiment-to-experiment band. For a LEGACY single-run cell (one dir, e.g. kernels) the
+"pool" is one fit, so the band is just that fit's test-toy IQR of correlated bootstrap resamples
+and STILL UNDERESTIMATES the true spread — label those as such.
 
 Caveat 2: p is discretized on a 1/(B+1) grid. When the median test T exceeds
 every null T, all p_i pin to the bank floor 1/(B+1): the band and CI then
@@ -82,37 +84,57 @@ def collect_T(run_dir, mode):
     return np.array(out, dtype=float)
 
 
-def pvalue_percentiles(run_dir, min_toys=5):
-    """Return (q25, med, q75, ci_lo, ci_hi, n_test, B) or None if insufficient.
-
-    ci_lo/ci_hi are a JOINT (double) bootstrap 95% CI of the median p-value:
-    each iteration resamples BOTH the null toys (size B) and the test toys
-    (size n_test), so the CI reflects the two sources of uncertainty on the
-    median p — the finite test-toy spread AND the finite-B Monte-Carlo error of
-    the null tail. (Resampling test toys alone would hold the shared null sample
-    fixed and understate the error by the usually-dominant finite-B term.)
-
-    Caveat: the test toys are correlated bootstrap resamples of one fixed target,
-    so both the band and this CI remain UNDERESTIMATES of the true
-    experiment-to-experiment spread — see the module docstring."""
+def _pertoy_p(run_dir, min_toys=5):
+    """Per-obs-toy empirical p-values for ONE fit (choice), each vs THAT fit's OWN null:
+    p_i = (#{T_null >= T_test,i} + 1)/(B + 1). Returns (p, tc, tt) or None if too few toys."""
     tc = collect_T(run_dir, "calibration")
     tt = collect_T(run_dir, "test")
     if len(tc) < min_toys or len(tt) < min_toys:
         return None
-    B, nt = len(tc), len(tt)
-    # per test toy: k_i = #{null >= T_test,i};  p_i = (k_i + 1)/(B + 1)
+    B = len(tc)
     k = (tc[None, :] >= tt[:, None]).sum(axis=1)          # (n_test,)
-    p = (k + 1.0) / (B + 1.0)
-    q25, med, q75 = np.percentile(p, QS)
-    # joint bootstrap of the median p: resample null AND test toys together.
+    return (k + 1.0) / (B + 1.0), tc, tt
+
+
+def pooled_pvalue_percentiles(run_dirs, min_toys=5):
+    """POOLED p-value band over the ensemble choices (Sean's 10-fit recipe).
+
+    Each choice's obs toys are turned into p-values against THAT choice's OWN null
+    (self-calibration), then ALL the per-toy p-values are POOLED across the choices and the
+    {25,50,75} percentiles taken. This pooled band captures BOTH the fit-to-fit (model-choice)
+    spread AND the test-toy spread — the honest experiment-to-experiment band that supersedes
+    the single-fit test-toy band. With one run_dir it reduces to the old single-fit percentiles.
+
+    ci_lo/ci_hi: a HIERARCHICAL bootstrap of the POOLED median — resample the choices
+    (fit-to-fit), and within each resampled choice resample its null + obs toys (test-toy +
+    finite-B) — so the CI reflects all three error sources.
+
+    Returns (q25, med, q75, ci_lo, ci_hi, n_test_total, B_typ, n_choices) or None."""
+    fits = []
+    for rd in run_dirs:
+        res = _pertoy_p(rd, min_toys)
+        if res is not None:
+            fits.append(res)
+    if not fits:
+        return None
+    pooled = np.concatenate([p for p, _, _ in fits])
+    q25, med, q75 = np.percentile(pooled, QS)
+    n_ch = len(fits)
     med_boot = np.empty(N_BOOT)
     for b in range(N_BOOT):
-        cb = tc[RNG.integers(0, B, B)]                    # null tail resample
-        tb = tt[RNG.integers(0, nt, nt)]                  # test-toy resample
-        kk = (cb[None, :] >= tb[:, None]).sum(axis=1)
-        med_boot[b] = np.median((kk + 1.0) / (B + 1.0))
+        ch = RNG.integers(0, n_ch, n_ch)                  # resample choices (fit-to-fit)
+        ps = []
+        for ci in ch:
+            _, tc, tt = fits[ci]
+            B, nt = len(tc), len(tt)
+            cb = tc[RNG.integers(0, B, B)]                # null tail resample (finite-B)
+            tb = tt[RNG.integers(0, nt, nt)]              # test-toy resample
+            kk = (cb[None, :] >= tb[:, None]).sum(axis=1)
+            ps.append((kk + 1.0) / (B + 1.0))
+        med_boot[b] = np.median(np.concatenate(ps))
     lo, hi = np.percentile(med_boot, [2.5, 97.5])
-    return q25, med, q75, lo, hi, nt, B
+    B_typ = int(np.median([len(tc) for _, tc, _ in fits]))
+    return q25, med, q75, lo, hi, len(pooled), B_typ, n_ch
 
 
 def parse_tag(name):
@@ -131,6 +153,18 @@ def parse_tag(name):
     else:
         return None
     return int(m_n.group(1)), int(m_t.group(1)), mode
+
+
+def find_run_dirs(base):
+    """Run-tag dirs under a base. Legacy/kernels layout: directly under <base>/. 10-fit NF
+    layout: nested under <base>/choice<k>/. Return both — grouping the 10 choices of a cell
+    (identical run-tag name) happens by name in main()."""
+    dirs = []
+    for pat in (os.path.join(base, "*"), os.path.join(base, "choice*", "*")):
+        for d in sorted(glob.glob(pat)):
+            if os.path.isdir(d) and parse_tag(os.path.basename(d)) is not None:
+                dirs.append(d)
+    return dirs
 
 
 def main():
@@ -159,32 +193,37 @@ def main():
     if args.out is None:                 # figs/ default lives inside the primary base dir
         args.out = os.path.join(args.base[0], "figs", "pvalue_vs_ntest.pdf")
 
+    # Group run-tag dirs by their NAME so the choices of a cell (choice0/<tag>, choice1/<tag>,
+    # ... — identical <tag> by construction, since choice is an OUT_BASE axis not a run_tag
+    # token) pool together. Legacy single-run dirs group as a pool of one.
+    groups = {}     # run-tag basename -> list of run_dirs (one per choice)
+    for base in args.base:
+        for run_dir in find_run_dirs(base):
+            groups.setdefault(os.path.basename(run_dir), []).append(run_dir)
+
     # (Nens, mode) -> list of (Ntest, q25, med, q75, ci_lo, ci_hi)
     rows = {}
     Bs = []
-    for base in args.base:
-        for run_dir in sorted(glob.glob(os.path.join(base, "*"))):
-            if not os.path.isdir(run_dir):
-                continue
-            tag = parse_tag(os.path.basename(run_dir))
-            if tag is None:
-                continue
-            nens, ntest, mode = tag
-            if ntest < args.min_ntest:
-                continue
-            if args.nens is not None and nens != 1 and nens not in set(args.nens):
-                continue
-            if args.mode != "all" and nens != 1 and mode != args.mode:
-                continue
-            res = pvalue_percentiles(run_dir)
-            if res is None:
-                continue
-            q25, med, q75, lo, hi, n_test, B = res
-            rows.setdefault((nens, mode), []).append((ntest, q25, med, q75, lo, hi))
-            Bs.append(B)
-            print(f"{mode:11s} Nens={nens:<4d} Ntest={ntest:<7d}  "
-                  f"med={med:.3f}  IQR=[{q25:.3f},{q75:.3f}]  "
-                  f"CI=[{lo:.3f},{hi:.3f}]  (n_test={n_test}, B={B})")
+    for tag_name, run_dirs in sorted(groups.items()):
+        tag = parse_tag(tag_name)
+        if tag is None:
+            continue
+        nens, ntest, mode = tag
+        if ntest < args.min_ntest:
+            continue
+        if args.nens is not None and nens != 1 and nens not in set(args.nens):
+            continue
+        if args.mode != "all" and nens != 1 and mode != args.mode:
+            continue
+        res = pooled_pvalue_percentiles(run_dirs)
+        if res is None:
+            continue
+        q25, med, q75, lo, hi, n_test, B, n_ch = res
+        rows.setdefault((nens, mode), []).append((ntest, q25, med, q75, lo, hi))
+        Bs.append(B)
+        print(f"{mode:11s} Nens={nens:<4d} Ntest={ntest:<7d}  "
+              f"med={med:.3f}  IQR=[{q25:.3f},{q75:.3f}]  CI=[{lo:.3f},{hi:.3f}]  "
+              f"(fits={n_ch}, pooled n_test={n_test}, B~{B})")
 
     if not rows:
         raise SystemExit("No usable runs found (need calibration/ + test/ T.npy under --base).")
@@ -253,11 +292,11 @@ def main():
     ax.set_ylim(0, 1)
     # N_test scan spans 100 -> 200000 (oversampling factor 1e-3 .. 2 of N_train=1e5).
     ax.set_xlim(80, 3.0e5)
-    ax.set_xticks([100, 200, 1000, 2000, 10000, 20000, 100000, 200000])
-    ax.set_xticklabels(["100", "200", "1k", "2k", "10k", "20k", "100k", "200k"], fontsize=8)
+    ax.set_xticks([100, 200, 1000, 2000, 10000, 20000, 50000, 100000, 200000])
+    ax.set_xticklabels(["100", "200", "1k", "2k", "10k", "20k", "50k", "100k", "200k"], fontsize=8)
     ax.minorticks_off()
     ax.set_xlabel(r"$N_{\rm test}$", color=INK, fontsize=13)
-    ax.set_ylabel(r"$p$-value   (median, 25–75%)", color=INK, fontsize=13)
+    ax.set_ylabel(r"$p$-value   (pooled median, 25–75% over fits)", color=INK, fontsize=13)
     if args.title:
         ax.set_title(args.title, color=INK, fontsize=10.5)
     ax.tick_params(direction="in", which="both", colors=INK, top=True, right=True)
