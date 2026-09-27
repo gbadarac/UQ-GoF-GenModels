@@ -59,9 +59,11 @@ M=500; CLIP=3; RNG_SEED=0
 # $WIFI_BASE/${WIFI_CONFIG}_ensemblecomponents<M>/choice<k>/ (member_seeds.txt + w_i_fitted + cov_w).
 WIFI_ROOT="$REPO_ROOT/Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform"
 case "$DIM" in
-  2d) SCENARIO=ens_2d_uniform; NMEM=512; SIGMA_DEF=0.4
+  # ENS default = single/32/128 for BOTH dims (decision 2026-09-28: 2D narrowed to this via job
+  # cancellation, 4D planned for it). single always via INCLUDE_SINGLE; ENS_DEF holds M>=2 sizes.
+  2d) SCENARIO=ens_2d_uniform; NMEM=512; SIGMA_DEF=0.4; ENS_DEF="32 128"
       WIFI_BASE="$WIFI_ROOT/2d_toymodel"; WIFI_CONFIG="N_100000_dim_2_seeds_512_4_4_64_8_2d_bimodal_gaussian_heavy_tail" ;;
-  4d) SCENARIO=ens_4d_uniform; NMEM=512; SIGMA_DEF=0.53   # 0.53 = preliminary min-p σ-scan result; override SIGMA= if re-scanned
+  4d) SCENARIO=ens_4d_uniform; NMEM=512; SIGMA_DEF=0.53; ENS_DEF="32 128"   # σ=0.53 = preliminary min-p σ-scan (override SIGMA= if re-scanned)
       WIFI_BASE="$WIFI_ROOT/4d_embedding"; WIFI_CONFIG="N_100000_dim_4_seeds_512_6_8_128_10_4d_embedding_qcd" ;;
   *)  echo "unknown DIM=$DIM (want 2d|4d)" >&2; exit 1 ;;
 esac
@@ -161,7 +163,7 @@ elif [[ "$SCAN" == "campaign" ]]; then
   if [[ "$DIM" == "4d" ]]; then NTEST_DEF="100 200 1000 2000 10000 20000 50000 100000"
   else                          NTEST_DEF="100 200 1000 2000 10000 20000 50000 100000 200000"; fi
   NTEST_LIST=${NTEST_LIST:-$NTEST_DEF}
-  ENS_LIST=${ENS_LIST:-"2 4 8 16 32 64 128"}
+  ENS_LIST=${ENS_LIST:-$ENS_DEF}   # DIM-dependent default: 2D = full 7 sizes; 4D = 32 128 (see DIM case above)
   MODES=${MODES:-"point composite"}       # point = frozen weights (plug-in) ; composite = constrained
   INCLUDE_SINGLE=${INCLUDE_SINGLE:-1}
   CHOICES=${CHOICES:-"0 1 2 3 4 5 6 7 8 9"}                 # the 10 ensemble choices (fit-to-fit axis)
