@@ -98,10 +98,10 @@ resolve_seeds() {  # $1=M  $2=choice
 # below the cluster MaxJobCount (one-job-per-toy = ~510k jobs = ~5x the cap, hogs the shared table).
 # Smaller batch for heavy (large-Ntest) toys so each task stays well inside its wall (a wall-timeout
 # then loses <= batch toys, not the whole cell). Override uniformly with BATCH=<n>.
-batch_for() {
-  if   [[ "$1" -ge 200000 ]]; then echo 5
-  elif [[ "$1" -ge 50000  ]]; then echo 10
-  elif [[ "$1" -ge 10000  ]]; then echo 20
+batch_for() {   # CPU-tuned: heavy toys are slower on CPU + the composite fit can crawl, so keep
+  if   [[ "$1" -ge 200000 ]]; then echo 2    # each task comfortably under the 12h standard wall
+  elif [[ "$1" -ge 50000  ]]; then echo 4
+  elif [[ "$1" -ge 10000  ]]; then echo 15
   else echo 50
   fi
 }
@@ -114,14 +114,21 @@ array_for() { local nt; [[ "$1" -eq 1 ]] && nt=$NULL_TOYS || nt=$OBS_TOYS; echo 
 # dying (set -e) mid-chunk. Bump SUBMIT_SLEEP if EAGAIN still appears.
 SUBMIT_SLEEP=${SUBMIT_SLEEP:-0.5}     # seconds between successful submissions
 SUBMIT_RETRIES=${SUBMIT_RETRIES:-10}  # retries on transient failure (backoff 10s,20s,... capped 60s)
+# Compute resource — DEFAULT is CPU (standard/t3, no GPU): the bottleneck is the scipy composite
+# numerator fit, which is CPU-bound (the GPU sits idle ~93% of a toy), so t3's ~3400 CPU cores
+# beat the 16 GPUs massively. LRT.py auto-runs on CPU when no GPU is present, so no code change.
+# For a GPU run instead: SB_PARTITION=gpu SB_ACCOUNT=gpu_gres SB_GRES=gpu:1.
+SB_PARTITION=${SB_PARTITION:-standard}
+SB_ACCOUNT=${SB_ACCOUNT:-t3}
+SB_GRES=${SB_GRES:-none}
 submit() {  # $1=array $2=time $3=mem $4=export-extra ; MEMBER_SEEDS taken from the env
   if [[ "$DRYRUN" == "1" ]]; then
-    echo "MEMBER_SEEDS=${MEMBER_SEEDS} sbatch --partition=gpu --time=$2 --mem=$3 --array=$1 --export=ALL,$COMMON,$4 submit_LRT_toys.sh"
+    echo "MEMBER_SEEDS=${MEMBER_SEEDS} sbatch --partition=$SB_PARTITION --account=$SB_ACCOUNT --gres=$SB_GRES --time=$2 --mem=$3 --array=$1 --export=ALL,$COMMON,$4 submit_LRT_toys.sh"
     return 0
   fi
   local a back
   for ((a=1; a<=SUBMIT_RETRIES; a++)); do
-    if sbatch --partition=gpu --time="$2" --mem="$3" --array="$1" --export=ALL,"$COMMON,$4" submit_LRT_toys.sh; then
+    if sbatch --partition="$SB_PARTITION" --account="$SB_ACCOUNT" --gres="$SB_GRES" --time="$2" --mem="$3" --array="$1" --export=ALL,"$COMMON,$4" submit_LRT_toys.sh; then
       sleep "$SUBMIT_SLEEP"; return 0
     fi
     back=$(( a*10 )); [ "$back" -gt 60 ] && back=60
@@ -168,7 +175,7 @@ elif [[ "$SCAN" == "campaign" ]]; then
   INCLUDE_SINGLE=${INCLUDE_SINGLE:-1}
   CHOICES=${CHOICES:-"0 1 2 3 4 5 6 7 8 9"}                 # the 10 ensemble choices (fit-to-fit axis)
   NULL_TOYS=${NULL_TOYS:-100}; OBS_TOYS=${OBS_TOYS:-100}   # PER CHOICE (Sean 2026-09-26: 100 Gaussian null + 100 obs)
-  STD_TIME=${STD_TIME:-"11:59:00"}; LONG_TIME=${LONG_TIME:-"1-00:00:00"}; LONG_ENS=128
+  STD_TIME=${STD_TIME:-"11:59:00"}; LONG_TIME=${LONG_TIME:-"11:59:00"}; LONG_ENS=128   # CPU standard wall=12h; small batches fit
 
   for choice in $CHOICES; do
     # member seeds per (ENS, choice), read from that choice's member_seeds.txt (M=1 = pool draw)
