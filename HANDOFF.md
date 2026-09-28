@@ -10,13 +10,14 @@
 
 You are running the **Normalizing-Flow LRT campaign (2D and 4D)** for the WiFi-NPLM paper (NF appendix).
 Everything is a thin SLURM fan-out over `LRT/submit_LRT_toys.sh` → `LRT/LRT.py`; the physics is
-already validated. Your job is to **run it at scale** on a cluster with many GPUs.
+already validated. Your job is to **run it at scale** on a cluster with many parallel workers — GPUs
+or (often better) CPU cores; see §4.
 
 Steps, in order:
-1. Upload this folder to your cluster and `tar -xf` it — it is a COMPLETE copy of the repo: all
-   the code PLUS the 4D models/data already in place (no git clone, no separate download).
+1. `git clone` the repo on your cluster (it has all the code + `envs/nplm_env.yml`), then drop this
+   bundle's `repo_artifacts/` into the checkout — that adds the big gitignored 2D + 4D models/data (§4).
 2. Build the `nplm_env` conda env from `envs/nplm_env.yml`.
-3. Edit ~8 hardcoded t3 paths + the SLURM directives (list in §4).
+3. Edit ~6 hardcoded t3 paths (list in §4); the partition/account/GRES are env knobs, not file edits.
 4. Dry-run, sanity-check ONE cell, then launch (§5).
 
 Total workload ≈ **~170k toys** — 4D ≈ 80k (10 fits × 8 N_test × 5 configs × 200) + 2D ≈ 90k (2D
@@ -47,8 +48,9 @@ WiFi analytic covariance under-estimates when the flow is misspecified — which
 
 ## 2. The exact run — grid, sizes, budget
 
-Driver: `LRT/run_nf_scan.sh` (mode `DIM=4d SCAN=campaign`). It resolves seeds and fans out
-`sbatch` array jobs over `LRT/submit_LRT_toys.sh` (scenario `nf:ens_4d_uniform`).
+Driver: `LRT/run_nf_scan.sh` (`DIM=4d` or `DIM=2d`, `SCAN=campaign`). It resolves seeds and fans out
+`sbatch` array jobs over `LRT/submit_LRT_toys.sh` (scenario `nf:ens_4d_uniform` / `nf:ens_2d_uniform`).
+The table below is the 4D config; the 2D deltas are in the note beneath it.
 
 | Knob | Value (4D) | Where |
 |---|---|---|
@@ -86,35 +88,37 @@ come from training" rule). Null toys (calib=1) are self-contained (SIR-from-q, `
 
 ## 3. What's in this bundle (the gitignored artifacts)
 
-This folder is a COMPLETE, ready-to-run copy of the repo: all the code PLUS the three big artifacts
-git normally excludes (`.gitignore` drops `*.pth`, `*.npy/.npz`, and the whole
-`EstimationNFnflows_outputs/` tree). They are already at the paths below inside this folder —
-nothing to download or rsync separately.
+This bundle carries ONLY the big artifacts that git excludes (`.gitignore` drops `*.pth`, `*.npy/.npz`,
+and the whole `EstimationNFnflows_outputs/` tree) — **the code is not here; you `git clone` it** (§4).
+Everything below lives under the bundle's `repo_artifacts/`, mirrored at its repo-relative path, so
+overlaying `repo_artifacts/` onto a fresh clone drops each file exactly where the code expects it.
 
 | Artifact | Repo-relative path | Size | What it is |
 |---|---|---|---|
 | 512-flow pool (4D) | `Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_seeds_512_6_8_128_10/` | 4.1 G | 512× `model_NNN/model.pth` + `architecture_config.json` (arch L6/blk8/h128/bins10). LRT loads the actual flow densities from `model_%03d/model.pth` — the wifi folder only stores seed *indices*, not models, so the pool IS required. Full pool shipped: the {single,32,128}×10-choice union already references **490/512** flows (10× M=128 alone hits 475), so a subset saves only ~4%. |
 | 10-fit wifi choices (4D) | `Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/4d_embedding/` | ~2 M | 7 `…_ensemblecomponents{2,4,8,16,32,64,128}` × 10 `choice{0..9}`, each with `member_seeds.txt`, `w_i_fitted.npy`, `cov_w.npy` (png plots stripped). With the {32,128} decision only those two configs are used, but all are shipped (negligible size). |
-| Held-out obs data (4D) | `data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_heldout_qcd.npy` | 44 M | bootstrap source for 4D calib=0 |
+| Held-out obs data (4D) | `data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_heldout_qcd.npy` | 58 M | bootstrap source for 4D calib=0 (~1.9M QCD jets) |
 | 512-flow pool (2D) | `Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_512_4_4_64_8/` | 303 M | 512× `model_NNN/model.pth` + `architecture_config.json` (arch L4/blk4/h64/bins8). Same role as the 4D pool; per-model pngs stripped. |
 | 10-fit wifi choices (2D) | `Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/2d_toymodel/` | 2.1 M | 2D analog: 7 `…_ensemblecomponents{2..128}` × 10 `choice{0..9}`, each with `member_seeds.txt`, `w_i_fitted.npy`, `cov_w.npy` (pngs stripped). |
 | Obs data (2D) | — (none) | — | **No file needed** — 2D obs draws fresh from analytic truth (`--target_truth 2d_gmm_skew`). |
 
-**The code is also included** (it's tracked in git, exported into this folder): `LRT/LRT.py`,
-`LRT/submit_LRT_toys.sh`, `LRT/run_nf_scan.sh`, the analysis/plot scripts, the shared utils
+**The code comes from the clone** (all tracked in git): `LRT/LRT.py`, `LRT/submit_LRT_toys.sh`,
+`LRT/run_nf_scan.sh`, the analysis/plot scripts, the shared utils
 `shared/Sparker_utils/{LRTGOFutils_v2,GENutils}.py` (LRT.py adds them to `sys.path` relative to its
 own location), `Uncertainty_Modeling/wifi/Fit_Weights/select_member_seeds.py`, and the env spec
-`envs/nplm_env.yml`. So this one folder is everything.
+`envs/nplm_env.yml`. So: clone = code, this bundle = the gitignored artifacts; together = a full run.
 
 ## 4. Setup on the new cluster
 
-**Step 1 — upload & unpack.** Copy the tarball to your cluster and extract:
+**Step 1 — clone the repo, then add the data.** Clone the code, then overlay this bundle's
+`repo_artifacts/` (its files are mirrored at their repo-relative paths):
 ```
-tar -xf MonoJet_NPLM_analysis.tar
+git clone git@github.com:gbadarac/MonoJet_NPLM_analysis.git
 cd MonoJet_NPLM_analysis
+rsync -a /path/to/handoff_bundle/repo_artifacts/ ./     # drops in the 512-flow pools, wifi choices, held-out data
 ```
-This is the whole repo with the 512-flow pool, wifi choices, and held-out data already in place —
-no git clone, no artifact rsync.
+The artifacts are gitignored, so they sit in the checkout without git complaining. (No GitHub access
+to the repo? Ask Giada to add you as a collaborator, or grab the code as a zip from GitHub.)
 
 **Step 2 — build the env.**
 ```
@@ -127,15 +131,18 @@ Note the absolute python: `conda run -n nplm_env which python` → you'll paste 
 - `LRT/run_nf_scan.sh`
   - L47 `REPO_ROOT="..."` → your checkout
   - L49 `SELPY="/work/gbadarac/miniforge3/envs/nplm_env/bin/python"` → your nplm_env python
-  - L117 / L122 `sbatch --partition=gpu ...` → your GPU partition
+  - Partition/account/GRES are **not hardcoded here** — they come from `SB_PARTITION`/`SB_ACCOUNT`/`SB_GRES`
+    (L121–123), which default to t3's CPU queue (`standard`/`t3`/`none`). Set them via env at run time
+    (§4 Step 4) — no file edit needed. Edit L121–123 only if you want new permanent defaults.
 - `LRT/submit_LRT_toys.sh`
   - L96 `REPO_ROOT="..."` → your checkout
   - L114 `PYBIN="/work/gbadarac/miniforge3/envs/nplm_env/bin/python"` → your nplm_env python
   - L224 `. /work/gbadarac/miniforge3/etc/profile.d/conda.sh` → your conda profile
-  - L7  `#SBATCH --account=gpu_gres` → your account
-  - L8  `#SBATCH --partition=qgpu,gpu` → your GPU partition(s)
-  - L9  `#SBATCH --gres=gpu:1` → your GRES string
-  - L11–12 `#SBATCH -o/-e /work/gbadarac/.../LRT/results/logs/...` → your log dir (or leave as `$REPO_ROOT/...` — the run creates `LRT/results/logs`)
+  - L11–12 `#SBATCH -o/-e /work/gbadarac/.../LRT/results/logs/...` → **absolute t3 log paths, must be
+    changed** to a dir on your cluster (`mkdir -p` the `LRT/results/logs` parent first, or SLURM drops the logs)
+  - L7–9 `#SBATCH --account/--partition/--gres` (GPU values) → **you can leave these**: the driver
+    passes `--partition/--account/--gres` from `SB_*` on the `sbatch` line, which OVERRIDE these
+    directives. They only matter if you call `submit_LRT_toys.sh` directly instead of via `run_nf_scan.sh`.
 
 > The kernels-only `LD_LIBRARY_PATH` block (submit_LRT_toys.sh ~L240) references an nplm_env `lib`
 > path but is **not** used for `MODEL=nf` (the `if MODEL_TYPE==nf` branch skips it). Ignore for 4D.
@@ -180,6 +187,80 @@ INCLUDE_SINGLE NULL_TOYS OBS_TOYS STD_TIME LONG_TIME BATCH`. Recommended: **subm
 at a time** (e.g. `CHOICES="0 1 2"`) so you can watch throughput and the pooled band becomes
 plottable as soon as ≥2 choices finish.
 
+### Claimable run list (grab a line, run it, mark it done)
+
+**Every cell is independent and the results POOL at the end.** Each `(dim, ensemble, mode, choice,
+N_test, calib, toy)` writes to its own dir under `choice<k>/`, and the plotter just gathers whatever
+is on disk. So there is **no assignment and no ordering** — pick whatever line fits your capacity,
+run it, and say *"I ran this one"*; that piece is done and someone else takes the rest. The only
+rules: *don't run the same line twice, and make sure every line gets run by someone.*
+
+Setup — run these two ONCE per shell (fill in your cluster's values, see §4); every command below is
+then run from the `LRT/` directory:
+```
+cd /path/to/MonoJet_NPLM_analysis/LRT
+export SB_PARTITION=<your_partition> SB_ACCOUNT=<your_account> SB_GRES=none   # SB_GRES=gpu:1 for GPU
+```
+
+**The list.** Each line below is ONE complete curve (its 25/75 band pooled over all 10 choices) on
+the final plot — a self-contained unit of work. The 10 lines are disjoint; together they are the
+whole campaign. Each is the FULL command, ready to copy-paste as-is (change `DRYRUN=0`→`DRYRUN=1` to
+dry-run it first):
+
+**2D**
+```
+# [ ] 2D · single model
+DRYRUN=0 DIM=2d SCAN=campaign INCLUDE_SINGLE=1 ENS_LIST=" " ./run_nf_scan.sh
+# [ ] 2D · M=32 · point
+DRYRUN=0 DIM=2d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=32  MODES=point     ./run_nf_scan.sh
+# [ ] 2D · M=32 · composite
+DRYRUN=0 DIM=2d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=32  MODES=composite ./run_nf_scan.sh
+# [ ] 2D · M=128 · point
+DRYRUN=0 DIM=2d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=128 MODES=point     ./run_nf_scan.sh
+# [ ] 2D · M=128 · composite   (heavy)
+DRYRUN=0 DIM=2d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=128 MODES=composite ./run_nf_scan.sh
+```
+
+**4D**
+```
+# [ ] 4D · single model
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=1 ENS_LIST=" " ./run_nf_scan.sh
+# [ ] 4D · M=32 · point
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=32  MODES=point     ./run_nf_scan.sh
+# [ ] 4D · M=32 · composite
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=32  MODES=composite ./run_nf_scan.sh
+# [ ] 4D · M=128 · point
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=128 MODES=point     ./run_nf_scan.sh
+# [ ] 4D · M=128 · composite   (heaviest)
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=128 MODES=composite ./run_nf_scan.sh
+```
+
+**Bigger appetite?** Do a whole dimension in one line (single auto-included):
+```
+DRYRUN=0 DIM=2d SCAN=campaign ./run_nf_scan.sh
+DRYRUN=0 DIM=4d SCAN=campaign ./run_nf_scan.sh
+```
+
+**A line too heavy for you?** Split it — the pieces are still independent, and someone else runs the
+other pieces. Add either:
+- `CHOICES="0 1 2 3 4"` (you) / `CHOICES="5 6 7 8 9"` (someone else) — halve the 10 fits; or
+- `NTEST_LIST="50000 100000"` (the heavy tail; 2D also `200000`) vs
+  `NTEST_LIST="100 200 1000 2000 10000 20000 50000"` (the cheap bulk).
+
+E.g. the 4D M=128 composite line taken by two people:
+```
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=128 MODES=composite CHOICES="0 1 2 3 4" ./run_nf_scan.sh
+DRYRUN=0 DIM=4d SCAN=campaign INCLUDE_SINGLE=0 ENS_LIST=128 MODES=composite CHOICES="5 6 7 8 9" ./run_nf_scan.sh
+```
+
+**Two things to keep straight:**
+- **The single line uses `ENS_LIST=" "` (a quoted space = "no ensemble sizes").** A bare
+  `ENS_LIST=""` does NOT work — bash's `:-` default would silently fall back to `32 128`.
+- **Single is auto-included** (`INCLUDE_SINGLE=1`) in any command that doesn't set `INCLUDE_SINGLE=0`.
+  The ensemble lines above set `=0`, so single is run by its own line exactly once per dim. If instead
+  someone runs a whole dimension in one go (the "bigger appetite" line), that already covers single —
+  don't also claim that dim's single line.
+
 ## 6. Output layout & plotting
 
 Results land at `LRT/results/nf/4d_uniform_ensemble/choice<k>/<run_tag>/{null,<obs seeds>}`
@@ -188,9 +269,14 @@ The `choice<k>/` level is what lets the plot POOL the 10 fits (the run_tag is id
 choices by construction). Plot (needs `nplm_env` python — scipy is broken in `nf_env`; pass the 2D
 base to `--base` for the 2D figure):
 ```
+# 4D:
 python LRT/plot_pvalue_vs_ntest.py \
   --base LRT/results/nf/4d_uniform_ensemble \
   --out  LRT/results/nf/4d_uniform_ensemble/figs/pvalue_vs_ntest.pdf
+# 2D:
+python LRT/plot_pvalue_vs_ntest.py \
+  --base LRT/results/nf/2d_uniform_ensemble \
+  --out  LRT/results/nf/2d_uniform_ensemble/figs/pvalue_vs_ntest.pdf
 ```
 It self-calibrates each choice against its own null, pools the per-toy p-values across choices, and
 draws the pooled median + 25/75 band. `--mode point|composite`, `--nens`, `--min_ntest` subset.
@@ -199,14 +285,16 @@ draws the pooled median + 25/75 band. `--mode point|composite`, `--nens`, `--min
 
 - **Toy BATCHING is mandatory.** One SLURM job per toy = ~510k jobs = ~5× a typical `MaxJobCount`,
   which triggers `sbatch: Resource temporarily unavailable` (EAGAIN) and hammers the shared job
-  table / your fairshare. The driver already batches (`batch_for`: 50/20/10/5 toys/task for
-  ≤2k/≤20k/≤100k/≥200k N_test) → tens of thousands of tasks, not hundreds of thousands. Override
-  uniformly with `BATCH=<n>` if your cluster's limits differ. **toy_id→seed is unchanged by
+  table / your fairshare. The driver already batches (`batch_for`: 50 toys/task for N_test <10k, 15
+  for 10k–50k, 4 for 50k–200k, 2 for ≥200k) → tens of thousands of tasks, not hundreds of thousands.
+  Override uniformly with `BATCH=<n>` if your cluster's limits differ. **toy_id→seed is unchanged by
   batching, so results are identical to unbatched.**
 - **Submit throttle/retry** is built in (`SUBMIT_SLEEP=0.5`s between submits, `SUBMIT_RETRIES=10`
   with backoff). Bump `SUBMIT_SLEEP` if your controller still throws EAGAIN.
-- **Walls:** ENS=128 gets `LONG_TIME=1-00:00:00`, everything else `STD_TIME=11:59:00`. A
-  wall-timeout loses only that task's ≤`BATCH` toys, not the cell. Adjust to your partition limits.
+- **Walls:** both `STD_TIME` and `LONG_TIME` default to `11:59:00` (t3's 12h CPU standard wall; the
+  small batch sizes fit inside it). `LONG_TIME` is applied to the heavy ENS=128 cells — bump it (e.g.
+  `LONG_TIME=1-00:00:00`) if your partition allows longer. A wall-timeout loses only that task's
+  ≤`BATCH` toys, not the cell.
 - **Memory:** `mem_for` = 14G (≥100k) / 8G (≥10k) / 6G (else), sized to measured RSS. The
   128-member 100k cell is heaviest (~2 GB state_dicts + data ∝ N).
 - **Resumability:** re-running the driver re-submits everything; there's no built-in "skip

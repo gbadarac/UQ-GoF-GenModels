@@ -56,7 +56,6 @@ wifi_better_basis/runs/
 *.md
 **/debug_notes/
 !README.md
-!HANDOFF.md
 
 # Python caches
 __pycache__/
