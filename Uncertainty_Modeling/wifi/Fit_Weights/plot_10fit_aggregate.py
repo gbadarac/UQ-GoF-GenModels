@@ -54,17 +54,20 @@ def truth_2d(i, grid):
 # Uncertainty_Modeling -> repo root)
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-# per dimensionality group: (results subdir, target data, hist bins, dataset label)
+# per dimensionality group. `data` = the HELD-OUT sample the fit is judged against
+# (disjoint from the N_train=100k training set), matching the reference GoF plots.
 GROUPS = {
     "2d_toymodel": dict(
         data=os.path.join(REPO_ROOT, "data/2d_gmm_toymodel/"
-             "2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_train.npy"),
+             "2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_test.npy"),   # 100k held-out
         bins=40, label="2D toy model", truth_fn=truth_2d,
+        ratio_ylim=(0.9, 1.1), n_train=100000,
     ),
     "4d_embedding": dict(
         data=os.path.join(REPO_ROOT, "data/4d_embeddings/"
-             "4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_train.npy"),
+             "4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_heldout_qcd.npy"),  # ~1.9M held-out
         bins=40, label="4D embedding", truth_fn=None,   # no analytic truth for the embedding
+        ratio_ylim=(0.8, 1.2), n_train=100000,
     ),
 }
 
@@ -116,12 +119,6 @@ def main():
     ap.add_argument("--data_4d", default=None, help="override 4D target data_train.npy")
     ap.add_argument("--bins_2d", type=int, default=None)
     ap.add_argument("--bins_4d", type=int, default=None)
-    ap.add_argument("--no_fit2fit", dest="show_fit2fit", action="store_false",
-                    help="hide the fit-to-fit 25-75%% overlay; show only the propagated "
-                         "+-1sigma test band. Default: BOTH are drawn (propagated +-1sigma "
-                         "filled = the test uncertainty; fit-to-fit grey dashed envelope = "
-                         "the experiment-to-experiment spread, the p-value plot's band)")
-    ap.set_defaults(show_fit2fit=True)
     ap.add_argument("--show_truth", action="store_true",
                     help="overlay the analytic ground-truth line where known (2D toy). "
                          "OFF by default; the ratio panel is ALWAYS to the median fit so "
@@ -160,11 +157,15 @@ def main():
                 print(f"  [{name}] no complete choices, skipped")
                 continue
             curves, grids, ferrs, n_fits = loaded
+            is_single = (n_components == 1)
             out = plot_ensemble_marginals_aggregate(
                 curves, grids, ferrs, x_data, feature_names, config_dir,
                 bins=bins, n_components=n_components, n_fits=n_fits,
                 truth_fn=(cfg["truth_fn"] if args.show_truth else None),
-                dataset_label=cfg["label"], show_fit2fit=args.show_fit2fit,
+                dataset_label=cfg["label"],
+                show_fit2fit=True,              # fit-to-fit 25-75% band on every plot
+                show_gaussian=(not is_single),  # single model has no weight covariance -> no Gaussian band
+                ratio_ylim=cfg["ratio_ylim"], n_train=cfg["n_train"],
             )
             print(f"  [{name}] M={n_components}, {n_fits} fits -> {os.path.relpath(out, args.results_root)}")
             made += 1

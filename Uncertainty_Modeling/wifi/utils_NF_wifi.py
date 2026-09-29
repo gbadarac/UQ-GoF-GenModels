@@ -316,80 +316,93 @@ def plot_ensemble_marginals_nd(f_i_models, x_data, weights, cov_w, feature_names
     plt.close(fig)
 
 
-# extra ink for the aggregate plot: orange = the per-fit WiFi band envelope.
+# canonical palette (shared with the p-value / test-statistic plot):
+#   BLUE  #2a78d6 = Gaussian composite band   RED #c0392b = replicate/bootstrap composite
+#   GREY  #9a9a9a = plug-in / fitted-model line   GRID #c9c8c0 = light reference lines + spines
+#   MUTED #8a897f = annotation text            INK  #33322e = axis labels / titles / data
 ORANGE = "#eb6834"
+RED = "#c0392b"
+GRID = "#c9c8c0"
+
+
+def _fmt_N(n):
+    """LaTeX event count for legends: 100000 -> '10^{5}', 1900000 -> '1.9\\times10^{6}'."""
+    import math
+    n = int(n)
+    if n <= 0:
+        return str(n)
+    e = int(round(math.log10(n)))
+    if abs(n - 10 ** e) <= 0.01 * 10 ** e:
+        return f"10^{{{e}}}"
+    e = int(math.floor(math.log10(n)))
+    return f"{n / 10 ** e:.1f}\\times10^{{{e}}}"
 
 
 def _draw_marginal_feature_aggregate(ax_main, ax_ratio, grid, median, band_lo, band_hi,
                                      wifi_lo, wifi_hi, data_x, data_y, data_err,
                                      truth, feature_label, leftmost=False, show_legend=False,
-                                     ratio_ylim=(0.8, 1.2), show_fit2fit=False):
-    """One feature's 10-fit-AGGREGATE density (top) + ratio (bottom), paper template.
-
-    Top panel: target sample as points with Poisson error bars, the MEDIAN fitted
-    model over the 10 ensemble fits, and -- as the primary BLUE filled band -- the
-    uncertainty that is actually PROPAGATED INTO THE TEST: the WiFi weight-covariance
-    +-1sigma band (``wifi_lo``/``wifi_hi`` = median +- mean f_err over the fits, where
-    f_err = ensemble_unc(Sigma_w)). The composite/point-null LRT profiles/plugs the
-    weights under N(w_hat, Sigma_w) (see LRT.py), so this band is EXACTLY the density-
-    level version of the test's weight prior -> the plot is a coverage check: does the
-    target sit inside the uncertainty the test will use?  Optional overlays: ``truth``
-    (analytic ground-truth line, 2D toy only) and, with ``show_fit2fit``, the fit-to-fit
-    25-75% IQR ACROSS the 10 fits (grey dashed envelope; the p-value plot's convention,
-    a DIFFERENT quantity = experiment-to-experiment spread of the point estimate).
-    Bottom panel: everything divided by the MEDIAN FIT (SAME reference for 2D and 4D so
-    the panels are structurally identical -- 4D has no analytic truth).
+                                     ratio_ylim=(0.8, 1.2), show_fit2fit=False,
+                                     show_gaussian=True, data_label="held-out data",
+                                     fit_label=r"fitted model  $f(x)=\sum_i w_i f_i(x)$"):
+    """One feature's WiFi-NF density (top) + ratio-to-fit (bottom), in the collaboration's
+    GoF template (cf. the tangent-method GMM marginal plots):
+      * held-out data -> black 'x' markers with Poisson error bars,
+      * fitted model  -> thin grey line = the WiFi ensemble median f(x)=sum_i w_i f_i(x),
+      * Gaussian uncertainty (68%) -> BLUE filled band = the weight-covariance Sigma_w
+        propagated to the density (median +- mean f_err over the fits); it is the density
+        analogue of the LRT's N(w_hat, Sigma_w) weight prior. NFs are NOT bootstrapped, so
+        (unlike the GMM plots) there is NO bootstrap band.
+      * optional: analytic ``truth`` (2D toy) and, with ``show_fit2fit``, the fit-to-fit
+        25-75% IQR across the 10 ensemble choices (salmon fill).
+    Bottom panel: everything / the fitted model ("ratio to fit").
     """
-    ref = median                                     # ratio reference: ALWAYS the median fit
+    ref = median                                     # ratio reference: the fitted model
     ref_at_data = np.interp(data_x, grid, ref)
-    # avoid exploding/negative ratios in empty tails (the signed-weight ensemble
-    # marginal can dip slightly below zero far out; drop those points in the ratio).
+    # trim to where the fit is well-defined (signed-weight median dips ~0 in far tails ->
+    # ratio blows up); mask data to the same x-range so band + points end together.
     thr = 1e-3 * np.nanmax(ref)
     ok = ref > thr
-    xlo, xhi = float(grid[ok].min()), float(grid[ok].max())   # well-defined support
-    # show data points only within that same x-range so the band and the points end
-    # together (no "band stops while data continue" in the sparse tails).
+    xlo, xhi = float(grid[ok].min()), float(grid[ok].max())
     dm = (data_x >= xlo) & (data_x <= xhi) & (ref_at_data > thr)
 
     # ---- top panel ----
-    if truth is not None:
-        ax_main.plot(grid, truth, color=INK, lw=1.7, zorder=4, label="ground truth")
-    # primary band = the uncertainty PROPAGATED INTO THE TEST (WiFi Sigma_w -> +-1sigma)
-    ax_main.fill_between(grid, wifi_lo, wifi_hi, color=BLUE, alpha=0.25, lw=0, zorder=2,
-                         label=r"propagated $\pm1\sigma$ (test unc.)")
     if show_fit2fit:
-        ax_main.plot(grid, band_lo, color=MUTED, lw=1.1, ls="--", zorder=3)
-        ax_main.plot(grid, band_hi, color=MUTED, lw=1.1, ls="--", zorder=3,
-                     label="fit-to-fit 25-75%")
-    ax_main.plot(grid, median, color=BLUE, lw=1.9, ls="-", zorder=4,
-                 label=r"median of 10 fits  $f(x)=\sum_i w_i f_i(x)$")
-    ax_main.errorbar(data_x, data_y, yerr=data_err, fmt="o", ms=3.0, color=MUTED,
-                     elinewidth=1.0, capsize=0, zorder=5, label="target data")
+        ax_main.fill_between(grid, band_lo, band_hi, color=RED, alpha=0.28, lw=0, zorder=1,
+                             label="fit-to-fit (25-75%)")
+    if show_gaussian:
+        ax_main.fill_between(grid, wifi_lo, wifi_hi, color=BLUE, alpha=0.30, lw=0, zorder=2,
+                             label="Gaussian uncertainty (68%)")
+    if truth is not None:
+        ax_main.plot(grid, truth, color=INK, lw=1.3, zorder=3, label="ground truth")
+    ax_main.plot(grid, median, color=GREY, lw=1.4, zorder=4, label=fit_label)
+    ax_main.errorbar(data_x[dm], data_y[dm], yerr=data_err[dm], fmt="x", ms=4.0, mew=0.9,
+                     color=INK, ecolor=INK, elinewidth=0.7, capsize=0, zorder=5,
+                     label=data_label)
     if leftmost:
-        ax_main.set_ylabel("density", color=INK, fontsize=17)
+        ax_main.set_ylabel("density", color=INK, fontsize=16)
     if show_legend:
         ax_main.legend(frameon=False, fontsize=11, labelcolor=INK)
     ax_main.tick_params(colors=INK)
 
-    # ---- ratio panel (ALWAYS to the median fit -> same for 2D and 4D) ----
-    ax_ratio.axhline(1.0, color=MUTED, ls=':', lw=1)          # = median / median
-    ax_ratio.errorbar(data_x[dm], data_y[dm] / ref_at_data[dm],
-                      yerr=data_err[dm] / ref_at_data[dm], fmt="o",
-                      ms=3.0, color=MUTED, elinewidth=1.0, capsize=0, zorder=5)
-    ax_ratio.fill_between(grid[ok], wifi_lo[ok] / ref[ok], wifi_hi[ok] / ref[ok],
-                          color=BLUE, alpha=0.25, lw=0, zorder=2)
+    # ---- ratio panel: everything / the fitted model ----
+    ax_ratio.axhline(1.0, color=GRID, ls=":", lw=1.0, zorder=1)
     if show_fit2fit:
-        ax_ratio.plot(grid[ok], band_lo[ok] / ref[ok], color=MUTED, lw=1.1, ls="--", zorder=3)
-        ax_ratio.plot(grid[ok], band_hi[ok] / ref[ok], color=MUTED, lw=1.1, ls="--", zorder=3)
+        ax_ratio.fill_between(grid[ok], band_lo[ok] / ref[ok], band_hi[ok] / ref[ok],
+                              color=RED, alpha=0.28, lw=0, zorder=1)
+    if show_gaussian:
+        ax_ratio.fill_between(grid[ok], wifi_lo[ok] / ref[ok], wifi_hi[ok] / ref[ok],
+                              color=BLUE, alpha=0.30, lw=0, zorder=2)
     if truth is not None:
-        ax_ratio.plot(grid[ok], truth[ok] / ref[ok], color=INK, lw=1.4, zorder=4)
+        ax_ratio.plot(grid[ok], truth[ok] / ref[ok], color=INK, lw=1.1, zorder=3)
+    ax_ratio.errorbar(data_x[dm], data_y[dm] / ref_at_data[dm],
+                      yerr=data_err[dm] / ref_at_data[dm], fmt="x", ms=4.0, mew=0.9,
+                      color=INK, ecolor=INK, elinewidth=0.7, capsize=0, zorder=5)
     ax_ratio.set_ylim(*ratio_ylim)
     ax_main.set_xlim(xlo, xhi)          # sharex='col' -> trims the ratio panel too
-    ax_ratio.set_xlabel(feature_label, color=INK, fontsize=17)
+    ax_ratio.set_xlabel(feature_label, color=INK, fontsize=16)
     if leftmost:
-        ax_ratio.set_ylabel("ratio to median fit", color=INK, fontsize=13)
+        ax_ratio.set_ylabel("ratio to fit", color=INK, fontsize=13)
     ax_ratio.tick_params(colors=INK)
-    ax_ratio.grid(True, ls='--', lw=0.5, alpha=0.5)
 
 
 def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
@@ -397,7 +410,7 @@ def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
                                       bins=40, n_components=None, n_fits=None, truth_fn=None,
                                       estimator_label="Normalizing Flow", dataset_label=None,
                                       qs=(25.0, 50.0, 75.0), ratio_ylim=(0.8, 1.2),
-                                      show_fit2fit=False):
+                                      show_fit2fit=False, show_gaussian=True, n_train=None):
     """Aggregate the per-fit ensemble marginals of the 10 ensemble CHOICES into ONE
     figure per configuration (paper template: data points + median + propagated band).
 
@@ -422,11 +435,31 @@ def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
     x = x_data.cpu().numpy() if hasattr(x_data, "cpu") else np.asarray(x_data)
     num_features = len(curves_per_feature)
     q_lo, q_mid, q_hi = qs
+    data_label = f"held-out data ($N={_fmt_N(x.shape[0])}$)"
+
+    # per-column title in the reference format: "N_train=100000  ($w_i f_i$ NF ensemble, M=128)".
+    # single model (M=1) has no ensemble/weights -> label it as a single flow.
+    single = (n_components == 1)
+    title_bits = []
+    if n_train is not None:
+        title_bits.append(rf"$N_\mathrm{{train}}={int(n_train)}$")
+    tag = ("single NF model" if single
+           else r"$w_i f_i$ NF ensemble" + (rf", $M={n_components}$" if n_components is not None else ""))
+    col_title = (title_bits[0] + f"  ({tag})") if title_bits else f"({tag})"
+    fit_label = (r"fitted model  $f(x)=f_i(x)$" if single
+                 else r"fitted model  $f(x)=\sum_i w_i f_i(x)$")
 
     fig, axes = plt.subplots(
         2, num_features, figsize=(6 * num_features, 6.2), sharex='col',
         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.04}, squeeze=False,
     )
+    # light-grey thin spines + inward ticks (reference look, not the heavy CMS default)
+    for ax in axes.ravel():
+        for sp in ax.spines.values():
+            sp.set_color(GRID)
+            sp.set_linewidth(0.9)
+        ax.tick_params(direction="in", which="both", colors=INK, top=True, right=True)
+        ax.minorticks_off()
 
     for i in range(num_features):
         ax_main, ax_ratio = axes[0, i], axes[1, i]
@@ -459,19 +492,14 @@ def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
             ax_main, ax_ratio, grid, mid, lo, hi, wifi_lo, wifi_hi,
             bin_centers, data_y, data_err, truth, feature_names[i],
             leftmost=(i == 0), show_legend=(i == 0), ratio_ylim=ratio_ylim,
-            show_fit2fit=show_fit2fit,
+            show_fit2fit=show_fit2fit, show_gaussian=show_gaussian,
+            data_label=data_label, fit_label=fit_label,
         )
+        ax_main.set_title(col_title, color=INK, fontsize=13, pad=6)
 
-    ds_label = dataset_label if dataset_label is not None else f"{x.shape[1]}D"
-    title = f"{ds_label} marginals for {estimator_label}"
-    if n_components is not None:
-        comp_word = "component" if n_components == 1 else "components"
-        title += f" ({n_components} ensemble {comp_word})"
-    # single tight title; the band/median content is already spelled out in the legend
-    fig.suptitle(title, color=INK, fontsize=15, y=0.98)
-
-    fig.tight_layout(rect=[0, 0, 1, 0.95], h_pad=0.3)
-    outpath = os.path.join(outdir, "ensemble_marginals_aggregate.png")
-    fig.savefig(outpath, dpi=130, bbox_inches="tight")
+    fig.tight_layout(h_pad=0.3)
+    base = os.path.join(outdir, "ensemble_marginals_aggregate")
+    for ext in ("png", "pdf"):                       # png for quick viewing, pdf (vector) for the paper
+        fig.savefig(f"{base}.{ext}", dpi=130, bbox_inches="tight")
     plt.close(fig)
-    return outpath
+    return base + ".png"
