@@ -45,9 +45,8 @@ MonoJet_NPLM_analysis/
 │  └─ 4d_embeddings/                      # 4D embedding datasets (JetClass)
 ├─ Train_Ensembles/                       # Orchestration for NF ensembles (arrays, logs)
 │  └─ Train_Models/                       # Train individual ensemble members
-│     ├─ Normalizing_Flows/               # NF training backends
-│     │  ├─ nflows/                       # nflows-based NF training
-│     │  └─ zuko/                         # zuko-based (Bayesian) flow training
+│     ├─ Normalizing_Flows/               # NF training (nflows backend)
+│     │  └─ nflows/                       # nflows-based NF training
 │     └─ Sparker_kernels/                 # Kernel-based density estimation
 ├─ Uncertainty_Modeling/                  # Weight fitting (w_i), sandwich covariance, propagation
 │  └─ wifi/                               # w_i f_i frequentist ensembles and covariance
@@ -127,15 +126,12 @@ data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/
 
 ### 5.1 Step 1 — Train NF ensemble
 
-You can train with two backends:
+NF training uses the `nflows/` backend.
 
-- `nflows/`
-- `zuko/` — same interface as `nflows`, plus **Bayesian Flows** support (set `bayesian=True` in the launcher arguments).
-
-Each NF backend folder contains:
-- Training script: `EstimationNFnflows.py` (nflows) or `EstimationNFzuko.py` (zuko)
-- SLURM submission script: `submit_array_NFnflows.sh` / `submit_array_NFzuko.sh`
-- Launcher script: `run_submit_array_NFnflows.sh` / `run_submit_array_NFzuko.sh`
+The `nflows/` folder contains:
+- Training script: `EstimationNFnflows.py`
+- SLURM submission script: `submit_array_NFnflows.sh`
+- Launcher script: `run_submit_array_NFnflows.sh`
 
 NF shared helpers (model building, sampling, plotting):
 - `Train_Ensembles/Train_Models/utils_flows.py`
@@ -157,19 +153,12 @@ Edit the launcher script to set:
 - ensemble size and seeds
 - output directory for logs and checkpoints
 
-3) **Bayesian Flows (zuko only)**  
-Enable in the launcher arguments (use the exact flag name you defined), e.g.:
-```bash
-bayesian=True
-```
-
 #### Run
-Activate the environment for Steps 1–2, move into your backend, and submit:
+Activate the environment for Steps 1–2, move into the backend, and submit:
 ```bash
 cd Train_Ensembles/Train_Models/Normalizing_Flows/nflows
 sbatch run_submit_array_NFnflows.sh
 ```
-Replace `nflows` with `zuko` if you use the zuko backend.
 
 #### Outputs
 After jobs finish you will find:

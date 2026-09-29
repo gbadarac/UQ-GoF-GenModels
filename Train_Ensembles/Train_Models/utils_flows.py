@@ -6,9 +6,6 @@ from nflows.distributions.normal import StandardNormal
 from nflows.transforms.base import CompositeTransform
 from nflows.transforms.autoregressive import MaskedPiecewiseRationalQuadraticAutoregressiveTransform
 from nflows.transforms.permutations import ReversePermutation
-import sys
-sys.path.insert(0, "/work/gbadarac/zuko")
-import zuko
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -42,18 +39,6 @@ def make_flow(num_layers, hidden_features, num_bins, num_blocks, num_features, n
     flow = Flow(transform, base_dist)
     return flow
 
-def make_flow_zuko(num_layers, hidden_features, num_bins, num_blocks, 
-                   num_features=2, num_context=0, bayesian=False):
-    flow = zuko.flows.NSF(
-        features=num_features,
-        context=num_context,
-        transforms=num_layers,
-        hidden_features=[hidden_features] * num_blocks,
-        bins=num_bins,
-        bayesian=bayesian
-    )
-    return flow
-
 def average_state_dicts(state_dicts):
     """Uniformly average a list of PyTorch state dicts"""
     n = len(state_dicts) #stores number of dictionaries, i.e. how many bootstrapped datasets you trained 
@@ -62,7 +47,7 @@ def average_state_dicts(state_dicts):
         avg_dict[key] = sum(sd[key] for sd in state_dicts) / n #for each key we sum across models and then average 
     return avg_dict
 
-def plot_individual_marginals(models, x_data, feature_names, outdir, num_samples, use_zuko=False):
+def plot_individual_marginals(models, x_data, feature_names, outdir, num_samples):
     """
     For each model in `models`, plot its generated marginals vs the target data (x_data).
 
@@ -81,10 +66,7 @@ def plot_individual_marginals(models, x_data, feature_names, outdir, num_samples
 
     for idx, model in enumerate(models):
         with torch.no_grad():
-            if use_zuko:
-                samples = model().sample((num_samples,)).cpu().numpy()
-            else:
-                samples = model.sample(num_samples).cpu().numpy()
+            samples = model.sample(num_samples).cpu().numpy()
 
         for i in range(num_features):
             target_feature = x_data_small[:, i]
