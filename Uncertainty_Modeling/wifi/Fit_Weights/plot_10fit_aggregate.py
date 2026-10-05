@@ -37,7 +37,10 @@ from scipy import stats
 
 # import the shared plotter from the wifi package (one level up)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from utils_NF_wifi import plot_ensemble_marginals_aggregate
+from utils_NF_wifi import (
+    plot_ensemble_marginals_aggregate,
+    plot_ensemble_marginals_M_grid,
+)
 
 
 # Analytic 1D marginals of the 2D toy (features are generated INDEPENDENTLY, so these
@@ -123,6 +126,18 @@ def main():
                     help="overlay the analytic ground-truth line where known (2D toy). "
                          "OFF by default; the ratio panel is ALWAYS to the median fit so "
                          "2D and 4D stay structurally identical either way")
+    ap.add_argument("--show_fit2fit", action="store_true",
+                    help="DIAGNOSTIC (off in the paper): overlay the fit-to-fit 25-75%% spread "
+                         "across the 10 choices (red). It is NOT propagable into the test for "
+                         "flows; kept only to show it is ~= the Gaussian band in 2D but >> it in "
+                         "4D. Paper plots show ONLY the Gaussian band (single model: no band).")
+    ap.add_argument("--skip_m_grid", action="store_true",
+                    help="skip the combined rows=features x cols=M comparison panel "
+                         "(marginals_M_grid.{png,pdf} at each group root); on by default")
+    ap.add_argument("--m_grid_values", type=int, nargs="+", default=[1, 32, 128],
+                    help="which ensemble sizes M become COLUMNS of the comparison panel "
+                         "(default: the campaign sizes 1 32 128). Missing sizes are skipped. "
+                         "Does not affect the per-config figures, which cover all M.")
     args = ap.parse_args()
 
     overrides = {"2d_toymodel": (args.data_2d, args.bins_2d),
@@ -148,6 +163,7 @@ def main():
               f"{tuple(x_data.shape)}, bins={bins}")
 
         config_dirs = sorted(glob.glob(os.path.join(group_dir, "*ensemblecomponents*")))
+        group_configs = []   # (M, curves, grids, ferrs) per config, for the combined M-grid
         for config_dir in config_dirs:
             name = os.path.basename(config_dir)
             m = re.search(r"ensemblecomponents(\d+)", name)
@@ -163,14 +179,33 @@ def main():
                 bins=bins, n_components=n_components, n_fits=n_fits,
                 truth_fn=(cfg["truth_fn"] if args.show_truth else None),
                 dataset_label=cfg["label"],
-                show_fit2fit=True,              # fit-to-fit 25-75% band on every plot
-                show_gaussian=(not is_single),  # single model has no weight covariance -> no Gaussian band
+                show_fit2fit=args.show_fit2fit,  # OFF in the paper (diagnostic only)
+                show_gaussian=(not is_single),   # single model has no weight covariance -> no band
                 ratio_ylim=cfg["ratio_ylim"], n_train=cfg["n_train"],
             )
             print(f"  [{name}] M={n_components}, {n_fits} fits -> {os.path.relpath(out, args.results_root)}")
             made += 1
+            if n_components is not None:
+                group_configs.append((n_components, curves, grids, ferrs))
 
-    print(f"\nDone. {made} aggregate figure(s) written.")
+        # combined comparison panel (Gaia): rows = feature marginals, cols = selected M
+        want = set(args.m_grid_values)
+        grid_configs = [c for c in group_configs if c[0] in want]
+        if not args.skip_m_grid and len(grid_configs) >= 2:
+            missing = sorted(want - {c[0] for c in grid_configs})
+            if missing:
+                print(f"  [{group}] M-grid: requested M {missing} not on disk, skipping those")
+            gout = plot_ensemble_marginals_M_grid(
+                grid_configs, x_data, feature_names, group_dir,
+                bins=bins, dataset_label=cfg["label"], n_train=cfg["n_train"],
+                ratio_ylim=cfg["ratio_ylim"],
+            )
+            print(f"  [{group}] M-grid ({len(grid_configs)} cols: "
+                  f"M={sorted(c[0] for c in grid_configs)}) -> "
+                  f"{os.path.relpath(gout, args.results_root)}")
+            made += 1
+
+    print(f"\nDone. {made} figure(s) written.")
 
 
 if __name__ == "__main__":

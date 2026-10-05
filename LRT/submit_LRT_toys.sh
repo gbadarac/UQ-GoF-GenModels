@@ -94,7 +94,7 @@ W_COV_SCALE=${W_COV_SCALE:-1.0}     # [constrained] diagnostic scale on Sigma_w;
 
 # ─── Per-scenario paths (EDIT THESE) ─────────────────────────────────
 REPO_ROOT="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
-PY="$REPO_ROOT/LRT/LRT.py"
+PY="$REPO_ROOT/LRT/LRT_rejnull.py"
 
 # defaults; the MODEL case sets env, each scenario overrides its paths (empties stay empty -> not passed)
 MODEL_TYPE="$MODEL"; NENSEMBLE=""; PYBIN="python"   # PYBIN: NF (MODEL case) overrides to nplm_env absolute python

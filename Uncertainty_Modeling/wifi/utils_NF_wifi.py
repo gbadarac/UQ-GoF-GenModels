@@ -323,6 +323,9 @@ def plot_ensemble_marginals_nd(f_i_models, x_data, weights, cov_w, feature_names
 ORANGE = "#eb6834"
 RED = "#c0392b"
 GRID = "#c9c8c0"
+# opaque band tints (NO alpha — overlapping alpha bands wash out to grey); Sean's paper_style
+BLUE_BAND = "#b3cdf0"   # Gaussian uncertainty band
+RED_BAND = "#f0b9b1"    # fit-to-fit band (diagnostic overlay only)
 
 
 def _fmt_N(n):
@@ -344,16 +347,18 @@ def _draw_marginal_feature_aggregate(ax_main, ax_ratio, grid, median, band_lo, b
                                      ratio_ylim=(0.8, 1.2), show_fit2fit=False,
                                      show_gaussian=True, data_label="held-out data",
                                      fit_label=r"fitted model  $f(x)=\sum_i w_i f_i(x)$"):
-    """One feature's WiFi-NF density (top) + ratio-to-fit (bottom), in the collaboration's
-    GoF template (cf. the tangent-method GMM marginal plots):
+    """One feature's WiFi-NF density (top) + ratio-to-fit (bottom), in Sean's paper style
+    (paper_style_bundle/plot_marginals_paper.py):
       * held-out data -> black 'x' markers with Poisson error bars,
-      * fitted model  -> thin grey line = the WiFi ensemble median f(x)=sum_i w_i f_i(x),
-      * Gaussian uncertainty (68%) -> BLUE filled band = the weight-covariance Sigma_w
-        propagated to the density (median +- mean f_err over the fits); it is the density
-        analogue of the LRT's N(w_hat, Sigma_w) weight prior. NFs are NOT bootstrapped, so
-        (unlike the GMM plots) there is NO bootstrap band.
-      * optional: analytic ``truth`` (2D toy) and, with ``show_fit2fit``, the fit-to-fit
-        25-75% IQR across the 10 ensemble choices (salmon fill).
+      * fitted model  -> MUTED grey solid line = the WiFi ensemble median f(x)=sum_i w_i f_i(x),
+      * "Gaussian uncertainty (68%)" -> opaque BLUE_BAND fill = the weight-covariance Sigma_w
+        propagated to the density (median +- mean f_err over the fits); the density analogue of
+        the LRT's N(w_hat, Sigma_w) weight prior, and the ONLY uncertainty an NF actually
+        propagates into the test. `show_gaussian=False` (single model) -> no band at all.
+      * `show_fit2fit` (DIAGNOSTIC, off in the paper) adds the fit-to-fit 25-75% spread across
+        the 10 choices as an opaque RED_BAND — NOT propagable into the test; kept only to show
+        it's ~= the Gaussian band in 2D but >> it in 4D.
+    Bands are opaque tints (no alpha); wider (red) drawn first, Gaussian (blue) on top.
     Bottom panel: everything / the fitted model ("ratio to fit").
     """
     ref = median                                     # ratio reference: the fitted model
@@ -367,42 +372,52 @@ def _draw_marginal_feature_aggregate(ax_main, ax_ratio, grid, median, band_lo, b
 
     # ---- top panel ----
     if show_fit2fit:
-        ax_main.fill_between(grid, band_lo, band_hi, color=RED, alpha=0.28, lw=0, zorder=1,
+        ax_main.fill_between(grid, band_lo, band_hi, color=RED_BAND, lw=0, zorder=1,
                              label="fit-to-fit (25-75%)")
     if show_gaussian:
-        ax_main.fill_between(grid, wifi_lo, wifi_hi, color=BLUE, alpha=0.30, lw=0, zorder=2,
+        ax_main.fill_between(grid, wifi_lo, wifi_hi, color=BLUE_BAND, lw=0, zorder=2,
                              label="Gaussian uncertainty (68%)")
     if truth is not None:
-        ax_main.plot(grid, truth, color=INK, lw=1.3, zorder=3, label="ground truth")
-    ax_main.plot(grid, median, color=GREY, lw=1.4, zorder=4, label=fit_label)
-    ax_main.errorbar(data_x[dm], data_y[dm], yerr=data_err[dm], fmt="x", ms=4.0, mew=0.9,
-                     color=INK, ecolor=INK, elinewidth=0.7, capsize=0, zorder=5,
+        ax_main.plot(grid, truth, color=INK, lw=1.2, zorder=3, label="ground truth")
+    ax_main.plot(grid, median, color=MUTED, lw=1.0, ls="-", zorder=4, label=fit_label)
+    ax_main.errorbar(data_x[dm], data_y[dm], yerr=data_err[dm], fmt="x", ms=4, mew=1.0,
+                     color=INK, ecolor=INK, elinewidth=0.9, capsize=0, zorder=5,
                      label=data_label)
     if leftmost:
-        ax_main.set_ylabel("density", color=INK, fontsize=16)
+        ax_main.set_ylabel("density", color=INK, fontsize=12)
     if show_legend:
-        ax_main.legend(frameon=False, fontsize=11, labelcolor=INK)
-    ax_main.tick_params(colors=INK)
+        h, l = ax_main.get_legend_handles_labels()
+        pref = [data_label, fit_label, "Gaussian uncertainty (68%)",
+                "fit-to-fit (25-75%)", "ground truth"]
+        idx = [l.index(p) for p in pref if p in l]
+        ax_main.legend([h[i] for i in idx], [l[i] for i in idx],
+                       frameon=False, fontsize=9, labelcolor=INK, loc="best")
+
+    ax_main.set_xlim(xlo, xhi)          # sharex='col' -> trims the ratio panel too
 
     # ---- ratio panel: everything / the fitted model ----
-    ax_ratio.axhline(1.0, color=GRID, ls=":", lw=1.0, zorder=1)
+    # `ax_ratio is None` -> no ratio panel at all (the single-model plots: there is no band
+    # and no fit-to-fit spread, so the residual view adds nothing). The feature label then
+    # moves up onto the density panel.
+    if ax_ratio is None:
+        ax_main.set_xlabel(feature_label, color=INK, fontsize=13)
+        return
+    ax_ratio.axhline(1.0, color=MUTED, ls="-", lw=1.0, zorder=4)   # = fitted model
     if show_fit2fit:
         ax_ratio.fill_between(grid[ok], band_lo[ok] / ref[ok], band_hi[ok] / ref[ok],
-                              color=RED, alpha=0.28, lw=0, zorder=1)
+                              color=RED_BAND, lw=0, zorder=1)
     if show_gaussian:
         ax_ratio.fill_between(grid[ok], wifi_lo[ok] / ref[ok], wifi_hi[ok] / ref[ok],
-                              color=BLUE, alpha=0.30, lw=0, zorder=2)
+                              color=BLUE_BAND, lw=0, zorder=2)
     if truth is not None:
-        ax_ratio.plot(grid[ok], truth[ok] / ref[ok], color=INK, lw=1.1, zorder=3)
+        ax_ratio.plot(grid[ok], truth[ok] / ref[ok], color=INK, lw=1.0, zorder=3)
     ax_ratio.errorbar(data_x[dm], data_y[dm] / ref_at_data[dm],
-                      yerr=data_err[dm] / ref_at_data[dm], fmt="x", ms=4.0, mew=0.9,
-                      color=INK, ecolor=INK, elinewidth=0.7, capsize=0, zorder=5)
+                      yerr=data_err[dm] / ref_at_data[dm], fmt="x", ms=4, mew=1.0,
+                      color=INK, ecolor=INK, elinewidth=0.9, capsize=0, zorder=5)
     ax_ratio.set_ylim(*ratio_ylim)
-    ax_main.set_xlim(xlo, xhi)          # sharex='col' -> trims the ratio panel too
-    ax_ratio.set_xlabel(feature_label, color=INK, fontsize=16)
+    ax_ratio.set_xlabel(feature_label, color=INK, fontsize=13)
     if leftmost:
-        ax_ratio.set_ylabel("ratio to fit", color=INK, fontsize=13)
-    ax_ratio.tick_params(colors=INK)
+        ax_ratio.set_ylabel("ratio to fit", color=INK, fontsize=12)
 
 
 def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
@@ -432,37 +447,81 @@ def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
             None (e.g. 4D embedding) the ratio panel is taken w.r.t. the median fit.
         qs: the (low, mid, high) percentiles; defaults to the 25/50/75 house standard.
     """
+    # serif fonts to match the paper body + Sean's p-value plots. MUST come AFTER mplhep's CMS
+    # style (imported at module load) so serif wins. Ref: paper_style_bundle/paper_style.py.
+    # Reset label locations to center too (CMS puts them at the axis ends).
+    plt.rcParams.update({"font.family": "serif", "mathtext.fontset": "dejavuserif",
+                         "xaxis.labellocation": "center", "yaxis.labellocation": "center"})
+
     x = x_data.cpu().numpy() if hasattr(x_data, "cpu") else np.asarray(x_data)
     num_features = len(curves_per_feature)
     q_lo, q_mid, q_hi = qs
     data_label = f"held-out data ($N={_fmt_N(x.shape[0])}$)"
 
-    # per-column title in the reference format: "N_train=100000  ($w_i f_i$ NF ensemble, M=128)".
-    # single model (M=1) has no ensemble/weights -> label it as a single flow.
+    # per-column title, Sean's compact format: "$N_{\rm train}=100k$  (...)". single model (M=1)
+    # has no ensemble/weights -> label as a single model.
     single = (n_components == 1)
     title_bits = []
     if n_train is not None:
-        title_bits.append(rf"$N_\mathrm{{train}}={int(n_train)}$")
+        title_bits.append(rf"$N_{{\rm train}}={int(n_train) // 1000}k$")
     tag = ("single NF model" if single
            else r"$w_i f_i$ NF ensemble" + (rf", $M={n_components}$" if n_components is not None else ""))
     col_title = (title_bits[0] + f"  ({tag})") if title_bits else f"({tag})"
     fit_label = (r"fitted model  $f(x)=f_i(x)$" if single
                  else r"fitted model  $f(x)=\sum_i w_i f_i(x)$")
 
-    fig, axes = plt.subplots(
-        2, num_features, figsize=(6 * num_features, 6.2), sharex='col',
-        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.04}, squeeze=False,
-    )
-    # light-grey thin spines + inward ticks (reference look, not the heavy CMS default)
-    for ax in axes.ravel():
+    # 2D -> one row of (marginal,ratio) columns (the two-panel template); 4D -> Sean's 2x2 grid
+    # of (marginal,ratio) pairs (paper_style_bundle/example_marginal_grid.py). The grid is the
+    # SAME WIDTH as the 2D figure, so both render at the same font size at a fixed paper-column
+    # width -- a 1x4 strip would get squeezed ~2x more and come out with smaller fonts.
+    # Single-model plots (M=1) carry no band and no fit-to-fit spread, so the residual view adds
+    # nothing -> drop the ratio panel entirely for those (show_ratio=False): a density-only figure.
+    grid_layout = (num_features == 4)
+    show_ratio = not single
+
+    def _style_ax(ax):            # light-grey thin spines + inward ticks (not the heavy CMS default)
         for sp in ax.spines.values():
             sp.set_color(GRID)
             sp.set_linewidth(0.9)
         ax.tick_params(direction="in", which="both", colors=INK, top=True, right=True)
         ax.minorticks_off()
 
+    if grid_layout:
+        from matplotlib.ticker import MaxNLocator
+        if show_ratio:
+            fig = plt.figure(figsize=(10, 11.4))
+            # row index 2 (height 0.62) is a spacer between the two (marginal,ratio) row-pairs
+            gs = fig.add_gridspec(5, 2, height_ratios=[3, 1, 0.62, 3, 1], hspace=0.05, wspace=0.25)
+            main_axes, ratio_axes = [], []
+            for d in range(num_features):
+                r, c = 3 * (d // 2), d % 2
+                ax = fig.add_subplot(gs[r, c])
+                rx = fig.add_subplot(gs[r + 1, c], sharex=ax)
+                main_axes.append(ax)
+                ratio_axes.append(rx)
+        else:
+            # density-only 2x2 grid, same 10-inch width as the ratio version
+            fig = plt.figure(figsize=(10, 8.8))
+            gs = fig.add_gridspec(2, 2, hspace=0.28, wspace=0.25)
+            main_axes = [fig.add_subplot(gs[d // 2, d % 2]) for d in range(num_features)]
+            ratio_axes = [None] * num_features
+    else:
+        nrows = 2 if show_ratio else 1
+        fig, axes = plt.subplots(
+            nrows, num_features, figsize=(5 * num_features, 5.4 if show_ratio else 4.0),
+            sharex='col',
+            gridspec_kw=({'height_ratios': [3, 1], 'hspace': 0.05} if show_ratio else None),
+            squeeze=False,
+        )
+        main_axes = [axes[0, i] for i in range(num_features)]
+        ratio_axes = ([axes[1, i] for i in range(num_features)] if show_ratio
+                      else [None] * num_features)
+
+    for ax in main_axes + [a for a in ratio_axes if a is not None]:
+        _style_ax(ax)
+
     for i in range(num_features):
-        ax_main, ax_ratio = axes[0, i], axes[1, i]
+        ax_main, ax_ratio = main_axes[i], ratio_axes[i]
         curves = np.asarray(curves_per_feature[i])        # (n_fits, n_curve)
         grid = np.asarray(grids_per_feature[i])           # (n_curve,)
 
@@ -491,15 +550,217 @@ def plot_ensemble_marginals_aggregate(curves_per_feature, grids_per_feature,
         _draw_marginal_feature_aggregate(
             ax_main, ax_ratio, grid, mid, lo, hi, wifi_lo, wifi_hi,
             bin_centers, data_y, data_err, truth, feature_names[i],
-            leftmost=(i == 0), show_legend=(i == 0), ratio_ylim=ratio_ylim,
+            # grid: every pair is its own column pair -> y-labels on all (Sean's template);
+            # strip: only the leftmost column carries the y-labels.
+            leftmost=(True if grid_layout else (i == 0)),
+            show_legend=(i == 0), ratio_ylim=ratio_ylim,
             show_fit2fit=show_fit2fit, show_gaussian=show_gaussian,
             data_label=data_label, fit_label=fit_label,
         )
-        ax_main.set_title(col_title, color=INK, fontsize=13, pad=6)
+        if grid_layout:
+            # sparse ticks on the half-width panels; hide the density-panel x labels only when a
+            # ratio panel sits below it (otherwise the density panel is its column's bottom row).
+            (ax_ratio if show_ratio else ax_main).xaxis.set_major_locator(MaxNLocator(5))
+            if show_ratio:
+                ax_main.tick_params(labelbottom=False)         # x labels only on the ratio panel
+        else:
+            ax_main.set_title(col_title, color=INK, fontsize=10.5, pad=6)
 
-    fig.tight_layout(h_pad=0.3)
+    if grid_layout:
+        fig.suptitle(col_title, color=INK, fontsize=10.5,
+                     y=(0.905 if show_ratio else 0.95))        # one title for the 2x2 grid
+    else:
+        fig.tight_layout(h_pad=0.3)
     base = os.path.join(outdir, "ensemble_marginals_aggregate")
     for ext in ("png", "pdf"):                       # png for quick viewing, pdf (vector) for the paper
+        fig.savefig(f"{base}.{ext}", dpi=130, bbox_inches="tight")
+    plt.close(fig)
+    return base + ".png"
+
+
+def plot_ensemble_marginals_M_grid(configs, x_data, feature_names, outdir,
+                                   bins=40, dataset_label=None, n_train=None,
+                                   qs=(25.0, 50.0, 75.0), ratio_ylim=(0.8, 1.2),
+                                   fname="marginals_M_grid"):
+    """Compress the per-M marginal figures into ONE comparison panel (Gaia's request):
+    ROWS = feature marginals, COLUMNS = ensemble size M (e.g. 1, 32, 128). Each cell is a
+    (density, ratio-to-fit) pair: held-out data (black 'x') + that config's fitted-median
+    marginal (grey) + Gaussian 68% band (blue). So the whole M-progression of one marginal
+    reads across a row at a shared per-row density + x scale.
+
+    The SINGLE-MODEL column (M=1) has no weight covariance -> no band -> the ratio panel
+    carries no information, so its density is the SAME size as the others and the ratio row
+    below it is simply left blank (white space).
+
+    This is a TRANSPOSE of the per-config aggregate (which fixes M and shows all features):
+    here M runs along the columns so the comparison is M=1 -> M=128 for a fixed marginal.
+
+    configs: list of (M, curves_per_feature, grids_per_feature, ferr_per_feature), any order
+        (sorted here by M). curves_per_feature[i] = (n_fits, n_curve) stacked over the 10 fits;
+        grids_per_feature[i] = (n_curve,); ferr_per_feature[i] = (n_fits, n_curve) WiFi cov band.
+        Exactly the per-config arrays plot_ensemble_marginals_aggregate already consumes.
+    Writes <outdir>/<fname>.{png,pdf}; returns the PNG path.
+    """
+    from matplotlib.ticker import MaxNLocator
+    # serif to match the paper body + Sean's plots; AFTER mplhep's CMS import so serif wins.
+    # Also reset label locations to CENTER: mplhep's CMS style puts axis labels at the axis
+    # ends (xaxis->right, yaxis->top), which would push x_i to the right and "ratio" to the top.
+    plt.rcParams.update({"font.family": "serif", "mathtext.fontset": "dejavuserif",
+                         "xaxis.labellocation": "center", "yaxis.labellocation": "center"})
+
+    x = x_data.cpu().numpy() if hasattr(x_data, "cpu") else np.asarray(x_data)
+    n_features = len(feature_names)
+    configs = sorted(configs, key=lambda c: c[0])        # columns ordered by M
+    n_cols = len(configs)
+    _, q_mid, _ = qs
+    data_label = f"held-out data ($N={_fmt_N(x.shape[0])}$)"
+
+    def _style(ax):                                      # light-grey thin spines + inward ticks
+        for sp in ax.spines.values():
+            sp.set_color(GRID)
+            sp.set_linewidth(0.9)
+        # length=3 shortens the ticks (mplhep's CMS style makes them long ~10pt)
+        ax.tick_params(direction="in", which="both", colors=INK, top=True, right=True,
+                       labelsize=7.5, length=3)
+        ax.minorticks_off()
+
+    # each feature = a (density[h=3], ratio[h=1]) row-pair; a thin spacer row between pairs
+    height_ratios = []
+    for i in range(n_features):
+        height_ratios += [3, 1]
+        if i < n_features - 1:
+            height_ratios += [0.55]
+    fig = plt.figure(figsize=(2.75 * n_cols, 2.95 * n_features))
+    gs = fig.add_gridspec(len(height_ratios), n_cols, height_ratios=height_ratios,
+                          hspace=0.06, wspace=0.08)
+
+    top_left_density = None                              # panel above the legend slot
+    for i in range(n_features):                          # row = one feature's marginal
+        rd, rr = 3 * i, 3 * i + 1                         # density row, ratio row
+        # target histogram for this feature (shared across all M columns)
+        xi = x[:, i]
+        margin = 0.05 * (xi.max() - xi.min())
+        low, high = xi.min() - margin, xi.max() + margin
+        edges = np.linspace(low, high, bins + 1)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        widths = np.diff(edges)
+        counts, _ = np.histogram(xi, bins=edges)
+        N_tot = counts.sum()
+        data_y = counts / (N_tot * widths)
+        data_err = np.sqrt(counts) / (N_tot * widths)
+
+        # per-column median + band, and the common per-row x/y limits
+        cols, xlo_row, xhi_row, ymax_row = [], np.inf, -np.inf, float(data_y.max())
+        for (M, cpf, gpf, fpf) in configs:
+            grid = np.asarray(gpf[i])
+            mid = np.percentile(np.asarray(cpf[i]), q_mid, axis=0)
+            ferr = np.asarray(fpf[i]).mean(axis=0)
+            thr = 1e-3 * np.nanmax(mid)
+            ok = mid > thr
+            xlo_row = min(xlo_row, float(grid[ok].min()))
+            xhi_row = max(xhi_row, float(grid[ok].max()))
+            ymax_row = max(ymax_row, float(mid[ok].max()))
+            cols.append((M, grid, mid, ferr, ok))
+
+        # leftmost column with a ratio panel carries the "ratio to fit" y-label (M=1 has none)
+        first_ratio_j = next((j for j, c in enumerate(cols) if c[0] > 1), None)
+
+        for j, (M, grid, mid, ferr, ok) in enumerate(cols):
+            has_ratio = (M > 1)                          # single model: no band -> no ratio panel
+            axd = fig.add_subplot(gs[rd, j])             # SAME-size density in every column
+            if has_ratio:
+                axr = fig.add_subplot(gs[rr, j], sharex=axd)
+                _style(axr)
+            else:
+                axr = None                               # M=1: leave the ratio row below blank
+            _style(axd)
+            if i == 0 and j == 0:
+                top_left_density = axd                    # sits above the legend slot
+
+            # ---- density panel ----
+            if has_ratio:
+                axd.fill_between(grid[ok], (mid - ferr)[ok], (mid + ferr)[ok],
+                                 color=BLUE_BAND, lw=0, zorder=2,
+                                 label="Gaussian uncertainty (68%)")
+            axd.plot(grid[ok], mid[ok], color=MUTED, lw=1.0, ls="-", zorder=4,
+                     label="fitted model")
+            axd.errorbar(centers, data_y, yerr=data_err, fmt="x", ms=3, mew=0.8,
+                         color=INK, ecolor=INK, elinewidth=0.7, capsize=0, zorder=5,
+                         label=data_label)
+            axd.set_xlim(xlo_row, xhi_row)
+            axd.set_ylim(0, 1.25 * ymax_row)
+            axd.xaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+            axd.yaxis.set_major_locator(MaxNLocator(nbins=4))
+            if i == 0:
+                axd.set_title(rf"$M={M}$", color=INK, fontsize=10.5, pad=4)
+            if j == 0:
+                axd.set_ylabel("density", color=INK, fontsize=10)
+            else:
+                axd.tick_params(labelleft=False)
+            if has_ratio:                                # x labels live on the ratio panel below
+                axd.tick_params(labelbottom=False)
+
+            # ---- ratio-to-fit panel (everything / the fitted median) ----
+            if has_ratio:
+                ref = mid
+                ref_at = np.interp(centers, grid, ref)
+                dm = (centers >= xlo_row) & (centers <= xhi_row) & (ref_at > 1e-3 * np.nanmax(ref))
+                axr.axhline(1.0, color=MUTED, ls="-", lw=1.0, zorder=4)
+                axr.fill_between(grid[ok], ((mid - ferr) / ref)[ok], ((mid + ferr) / ref)[ok],
+                                 color=BLUE_BAND, lw=0, zorder=2)
+                axr.errorbar(centers[dm], (data_y / ref_at)[dm], yerr=(data_err / ref_at)[dm],
+                             fmt="x", ms=3, mew=0.8, color=INK, ecolor=INK, elinewidth=0.7,
+                             capsize=0, zorder=5)
+                axr.set_xlim(xlo_row, xhi_row)
+                axr.set_ylim(*ratio_ylim)
+                axr.xaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+                axr.yaxis.set_major_locator(MaxNLocator(nbins=3))
+                if j == first_ratio_j:                   # leftmost ratio carries the y-label/ticks
+                    axr.set_ylabel("ratio", color=INK, fontsize=8, labelpad=1)
+                else:
+                    axr.tick_params(labelleft=False)
+
+            # x-axis label identifying the feature, on the leftmost RATIO panel's bottom
+            # (perpendicular to its "ratio" y-label -> no collision with the M=1 column). If no
+            # ratio column exists at all, fall back to the leftmost density.
+            if (has_ratio and j == first_ratio_j) or (first_ratio_j is None and j == 0):
+                bottom_ax = axr if has_ratio else axd
+                bottom_ax.tick_params(axis="x", pad=1.5)       # pull the tick numbers in
+                bottom_ax.set_xlabel(rf"$x_{{{i + 1}}}$", color=INK, fontsize=11, labelpad=1)
+
+    # legend in the blank white slot below the top-left (M=1) density: gs[1,0] is the ratio row
+    # of the first feature's first column, which is empty when that column is M=1. This never
+    # overlaps a curve (unlike an in-panel legend on the bimodal). Handles from a density cell
+    # that has a band so all three entries show.
+    h, l = [], []
+    for a in fig.axes:
+        hh, ll = a.get_legend_handles_labels()
+        if "Gaussian uncertainty (68%)" in ll:
+            h, l = hh, ll
+            break
+    order = [l.index(p) for p in (data_label, "fitted model", "Gaussian uncertainty (68%)")
+             if p in l]
+    if order and configs[0][0] == 1:                     # first column is M=1 -> gs[1,0] is blank
+        if top_left_density is not None:                 # its x-tick numbers hang into the slot
+            top_left_density.tick_params(axis="x", labelbottom=False)
+        legend_ax = fig.add_subplot(gs[1, 0])
+        legend_ax.set_axis_off()
+        legend_ax.legend([h[k] for k in order], [l[k] for k in order], frameon=False,
+                         fontsize=8, labelcolor=INK, loc="center",
+                         handlelength=1.4, handletextpad=0.5, borderaxespad=0.2)
+    elif order:                                          # no blank slot -> top strip fallback
+        fig.legend([h[k] for k in order], [l[k] for k in order], frameon=False, fontsize=9,
+                   labelcolor=INK, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 0.945))
+
+    m_list = ", ".join(str(c[0]) for c in configs)
+    ntr = rf",  $N_{{\rm train}}={int(n_train) // 1000}k$" if n_train is not None else ""
+    # fixed ABSOLUTE top margin (inches), not a fraction: a fraction leaves ~2x the title->plots
+    # gap on the taller 4D figure (4 rows) vs 2D (2 rows). Anchored to the 2D spacing.
+    figh = fig.get_figheight()
+    fig.suptitle(rf"$M = {m_list}$" + ntr, color=INK, fontsize=12, y=1 - 0.24 / figh)
+    fig.subplots_adjust(top=1 - 0.65 / figh, left=0.07, right=0.985)
+    base = os.path.join(outdir, fname)
+    for ext in ("png", "pdf"):
         fig.savefig(f"{base}.{ext}", dpi=130, bbox_inches="tight")
     plt.close(fig)
     return base + ".png"
