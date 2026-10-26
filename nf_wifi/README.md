@@ -4,10 +4,6 @@ This is the code behind App. B of *An end-to-end framework for uncertainty-aware
 ensembles of normalizing flows, the w_i f_i weight fit with its sandwich covariance, and the goodness-of-fit test with
 the point and Gaussian composite nulls (Figs. 10–13).
 
-The files are copied byte-for-byte from the analysis repository, keeping its directory layout so that the relative
-imports between them still resolve. Nothing has been edited. Files the paper does not use (the kernel-ensemble
-backend, the with-replacement null sampler `LRT.py`, notebooks, other Sparker utilities) are left out.
-
 ## Layout
 
 | Path | Paper step |
