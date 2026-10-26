@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+# run outputs
+sigma/runs/
+nf_wifi/LRT/results/
+nf_wifi/**/EstimationNFnflows_outputs/
+*.pth
+*.out
+*.err
+*.log

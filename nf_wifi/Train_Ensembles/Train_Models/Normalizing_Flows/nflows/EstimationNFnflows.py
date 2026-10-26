@@ -1,0 +1,167 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+import os, json, argparse
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+from nflows.flows import Flow
+from nflows.distributions.normal import StandardNormal
+from nflows.transforms.base import CompositeTransform
+from nflows.transforms.autoregressive import MaskedPiecewiseRationalQuadraticAutoregressiveTransform
+from nflows.transforms.permutations import ReversePermutation
+from torch.optim.lr_scheduler import CosineAnnealingLR
+import torch.optim as optim
+
+from utils_flows import make_flow
+
+# ------------------
+# Args
+# ------------------
+parser = argparse.ArgumentParser()
+parser.add_argument("--data_path", type=str, required=True, help="Path to training data")
+parser.add_argument("--outdir", type=str, required=True)
+parser.add_argument("--seed", type=int, required=True, help="Random seed / ensemble-member index")
+parser.add_argument("--n_epochs", type=int, default=1001)
+parser.add_argument("--batch_size", type=int, default=512)
+parser.add_argument("--learning_rate", type=float, default=5e-6)
+parser.add_argument("--hidden_features", type=int, default=64)
+parser.add_argument("--num_blocks", type=int, default=2)
+parser.add_argument("--num_bins", type=int, default=8)
+parser.add_argument("--num_layers", type=int, default=5)
+parser.add_argument("--num_features", type=int, required=True, help="Dimensionality of the data")
+args = parser.parse_args()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# Each ensemble member is written to its own <outdir>/model_{seed:03d}/model.pth
+# (+ info.json), analogous to the kernel pipeline's seed{NNN}/ folders. There is
+# no bundling step: downstream loads the members by iterating those subdirs.
+
+# ------------------
+# Load data
+# ------------------
+target_data = np.load(args.data_path) #load data from generate_target_data.py 
+target_tensor = torch.from_numpy(target_data).float()  # seed-42 data is float64; nflows weights are float32
+
+# ------------------
+# Training function
+# ------------------
+def train_flow(data, model_seed, bootstrap_seed):
+    '''
+    def init(m, noise_std):
+        if isinstance(m, torch.nn.Linear):
+            with torch.no_grad():
+                m.weight.add_(torch.randn_like(m.weight) * noise_std)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0.0)
+    '''
+    torch.manual_seed(model_seed) #ensure same initialization for all j for a fixed i 
+
+    flow = make_flow(args.num_layers, args.hidden_features, args.num_bins, args.num_blocks, args.num_features)
+
+    #noise_std = 1e-4 + (model_seed % 10) * 1e-5  # → from 1e-4 to 1.9e-4
+
+    # Apply light random perturbation       
+    #flow.apply(lambda m: init(m, noise_std))
+
+    opt=optim.Adam(flow.parameters(), lr=args.learning_rate)
+    # anneal DOWN from the base lr to lr/10 (was eta_min=1e-3 > base lr, which
+    # made the schedule ramp the rate UP -- an optimization bug, not a feature).
+    scheduler = CosineAnnealingLR(opt, T_max=args.n_epochs, eta_min=args.learning_rate * 0.1)
+    
+    train_size = int(0.8 * len(data))
+    train_data, val_data = data[:train_size], data[train_size:]
+    train_loader = DataLoader(TensorDataset(train_data), batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(TensorDataset(val_data), batch_size=args.batch_size)
+
+    train_losses, val_losses = [], []
+    min_loss = np.inf
+    patience_counter = 0
+
+    flow.to(device)  # move once you're sure data is on GPU
+
+    for epoch in range(args.n_epochs):
+        flow.train()
+        total_train_loss = 0.0
+        for batch in train_loader:
+            batch = batch[0].to(device)
+            opt.zero_grad()
+            train_loss = -flow.log_prob(batch).mean()
+            train_loss.backward()
+            opt.step()
+            total_train_loss += train_loss.item() * batch.size(0)
+        avg_train_loss = total_train_loss / len(train_data)
+        train_losses.append(avg_train_loss)
+
+        flow.eval()
+        total_val_loss = 0.0
+        with torch.no_grad():
+            for val_batch in val_loader:
+                val_batch = val_batch[0].to(device)
+                val_loss = -flow.log_prob(val_batch).mean()
+                total_val_loss += val_loss.item() * val_batch.size(0)
+        avg_val_loss = total_val_loss / len(val_data)
+        val_losses.append(avg_val_loss)
+        scheduler.step()
+        
+        if avg_val_loss < min_loss:
+            min_loss = avg_val_loss
+            model_dir = os.path.join(args.outdir, f"model_{model_seed:03d}")
+            os.makedirs(model_dir, exist_ok=True)
+            torch.save(flow.state_dict(), os.path.join(model_dir, "model.pth"))
+            metadata = {"seed": model_seed,"bootstrap_seed": bootstrap_seed}
+            with open(os.path.join(model_dir, "info.json"), "w") as f:
+                json.dump(metadata, f, indent=4)
+            patience_counter = 0
+
+        else:
+            patience_counter += 1
+            if patience_counter >= 10:
+                break
+            
+    # Persist this member's per-epoch loss history so overtraining can be
+    # inspected post-hoc (plot_nf_loss.py), mirroring plot_nf_marginals.py.
+    # best_epoch = argmin(val) = the checkpoint that was actually kept above.
+    model_dir = os.path.join(args.outdir, f"model_{model_seed:03d}")
+    os.makedirs(model_dir, exist_ok=True)
+    np.savez(os.path.join(model_dir, "losses.npz"),
+             train=np.asarray(train_losses), val=np.asarray(val_losses),
+             best_epoch=int(np.argmin(val_losses)))
+
+    return flow
+
+# ------------------
+# Loop: model seeds and bootstraps
+# ------------------
+model_seed = args.seed
+bootstrap_seed = args.seed + 10000
+
+#Note: different models are trained on the same bootstrapped datasets, which means (randmness coming from bootstrapping is the same for every trained model) 
+
+print(f"Training model f_{model_seed:03d}...")
+
+np.random.seed(bootstrap_seed)  # Fix bootstrap randomness
+
+boot_indices = np.random.choice(len(target_tensor), size=len(target_tensor), replace=True) #the size of bootstrap dataset is the same as the loaded training set, i.e. 400k 
+boot_data = target_tensor[boot_indices]
+
+train_flow(boot_data, model_seed, bootstrap_seed) #consequently the statististical power of the normalizing flow correpsonds to the size of the bnootstrapped dataset, i.e. 400k
+
+# Save architecture config and averaged model if bootstrap_id == 0
+if args.seed==0:
+    trial_config = {
+        "backend": "nflows",
+        "num_layers": args.num_layers,
+        "hidden_features": args.hidden_features,
+        "num_bins": args.num_bins,
+        "num_blocks": args.num_blocks,
+        "num_features": args.num_features
+    }
+    config_path = os.path.join(args.outdir, "architecture_config.json")
+    with open(config_path, "w") as f:
+        json.dump(trial_config, f, indent=4)
+
+    
+

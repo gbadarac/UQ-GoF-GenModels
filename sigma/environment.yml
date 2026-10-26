@@ -1,0 +1,10 @@
+name: sigma-gof
+channels:
+  - conda-forge
+dependencies:
+  # versions used for the paper results
+  - python=3.12
+  - numpy=2.5.1
+  - scipy=1.18.0
+  - scikit-learn=1.9.0
+  - matplotlib=3.11.0
