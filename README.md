@@ -54,10 +54,10 @@ UQ-GoF-GenModels/
 │        ├─ fit_ensemble_weights.py       # Unified weight-fitting script (MODEL_TYPE toggle)
 │        └─ submit_fit_weights.sh         # SLURM submission (set MODEL_TYPE=nf|kernels)
 ├─ LRT/                                   # One-sample learned LRT with uncertainty-aware reference
-│  ├─ LRT.py                              # Unified LRT script (--model_type kernels|nf)
+│  ├─ LRT_rejnull.py                      # Unified LRT script (--model_type kernels|nf)
 │  └─ submit_LRT_toys.sh                  # SLURM submission (set MODEL_TYPE=kernels|nf)
 ├─ shared/                                # Shared library used across pipeline stages
-│  └─ Sparker_utils/                      # Kernel utilities (SPARKutils, LRTGOFutils, ENSEMBLEutils, …)
+│  └─ Sparker_utils/                      # Kernel utilities (LRTGOFutils_v2, GENutils, SPARKutils, …)
 ├─ envs/                                  # Conda/pip environment files
 ├─ NOTES.md                               # Design decisions and experimental observations
 └─ README.md
@@ -164,18 +164,13 @@ sbatch run_submit_array_NFnflows.sh
 After jobs finish you will find:
 ```text
 Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/
-├── <one folder per trained member>   # checkpoints 
-└── f_i.pth                           # collects all members for downstream steps
-```
-If `f_i.pth` is missing but all single-model .pth files exist, gather them with:
-```bash
-Train_Ensembles/Train_Models/Normalizing_Flows/collect_all_models_into_ensemble.ipynb
+└── <one model_NNN/ folder per trained member>   # model.pth checkpoints, read directly downstream
 ```
 
 #### Quick visual check
-Plot model vs target marginals with the notebook:
+Plot model vs target marginals for each member:
 ```bash
-Train_Ensembles/Train_Models/Normalizing_Flows/test_NFs_marginals.ipynb
+python Train_Ensembles/Train_Models/Normalizing_Flows/nflows/plot_nf_marginals.py --trial_dir <.../N_..._seeds_M_...>
 ```
 
 #### Typical settings
@@ -255,13 +250,13 @@ $p(x \mid H_{\boldsymbol{\phi}}) = p_{\mathrm{REF}}(x) + f(x,\boldsymbol{\phi}),
 Both backends (NF and kernels) are handled by a single unified script under `LRT/`:
 
 #### Scripts
-- Python script: `LRT/LRT.py` — handles both backends via `--model_type kernels|nf`
+- Python script: `LRT/LRT_rejnull.py` — handles both backends via `--model_type kernels|nf`
 - Submission script: `LRT/submit_LRT_toys.sh` — set `MODEL_TYPE` and `CALIBRATION` at the top
 
 #### Configure
 Open `submit_LRT_toys.sh` and set:
 - `MODEL_TYPE`: `kernels` or `nf`
-- `CALIBRATION`: `1` = null toys (SIR + calibration pool), `0` = observed (target data)
+- `CALIBRATION`: `1` = null toys (capped rejection sampling from the ensemble), `0` = observed (target data)
 - `FIX_WIFI_WEIGHTS` / `FREE_WIFI_WEIGHTS`: optional flags to fix or free the wifi weights during the LRT
 - All paths (`W_PATH`, `W_COV_PATH`, `CALIB_DATA`, `TARGET_DATA`, and model-specific paths) are set automatically from the `MODEL_TYPE` toggle
 - SLURM array for number of toys, e.g. `#SBATCH --array=0-99` for 100 toys
