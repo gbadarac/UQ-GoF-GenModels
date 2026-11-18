@@ -139,10 +139,11 @@ case "$MODEL:$SCENARIO" in
 
   nf:1model_2d)
     NENSEMBLE=1
-    # -e 1 uses seed000 of the 2d_gmm ensemble dir as the single model; no wifi files (synthesized)
-    ENSEMBLE_DIR="$REPO_ROOT//work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_1_4_4_64_8"
+    # -e 1 uses model_000 of the 1-seed NF training dir as the single model; no wifi files (synthesized)
+    NF_TRAIN_DIR="$REPO_ROOT/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_seeds_1_4_4_64_8"
+    ARCH_CONFIG="$NF_TRAIN_DIR/architecture_config.json"
     TARGET_TRUTH="2d_gmm_skew"   # observed: draw fresh from the analytic truth each toy (no data file)
-    OUT_BASE="$REPO_ROOT/LRT/results/kernels/2d_single_model"
+    OUT_BASE="$REPO_ROOT/LRT/results/nf/2d_single_model"
     ;;
 
   nf:ens_2d)
@@ -203,7 +204,7 @@ case "$MODEL:$SCENARIO" in
 
   *)
     echo "Unsupported MODEL/SCENARIO combo: MODEL=$MODEL SCENARIO=$SCENARIO"
-    echo "  implemented -> kernels: 1model_2d | ens_2d ; nf: ens_2d | ens_2d_uniform | ens_4d_uniform"
+    echo "  implemented -> kernels: 1model_2d | ens_2d ; nf: 1model_2d | ens_2d | ens_2d_uniform | ens_4d_uniform"
     exit 1 ;;
 esac
 
