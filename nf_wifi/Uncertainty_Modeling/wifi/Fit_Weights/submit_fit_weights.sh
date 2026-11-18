@@ -8,12 +8,12 @@
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --array=0-9        # 10 ensemble CHOICES for the 10-fit campaign (RNG_SEED = array task id); override with --array=0 for a single fit
-#SBATCH -o /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%A_%a.out
-#SBATCH -e /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%A_%a.err
+#SBATCH -o /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%A_%a.out
+#SBATCH -e /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Uncertainty_Modeling/wifi/Fit_Weights/logs/fit_weights_%A_%a.err
 
 set -euo pipefail
 
-REPO_ROOT="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
+REPO_ROOT="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels"
 FW="Uncertainty_Modeling/wifi/Fit_Weights"
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32

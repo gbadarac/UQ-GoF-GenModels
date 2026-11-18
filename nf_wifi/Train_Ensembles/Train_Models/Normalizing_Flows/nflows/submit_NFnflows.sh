@@ -15,8 +15,8 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=8G
 #SBATCH --gres=gpu:1
-#SBATCH --output=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/logs/nf_%A_%a.out
-#SBATCH --error=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/logs/nf_%A_%a.err
+#SBATCH --output=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/logs/nf_%A_%a.out
+#SBATCH --error=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/logs/nf_%A_%a.err
 
 # ⚠ PART 2 TODO (loader symmetrization not finished): this trainer no longer
 # produces f_i.pth — the ensemble IS the per-member model_*/ subdirs. Downstream
@@ -29,12 +29,12 @@
 # =============================
 source /work/gbadarac/miniforge3/bin/activate
 conda activate nf_env
-export PYTHONPATH=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models:$PYTHONPATH
+export PYTHONPATH=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models:$PYTHONPATH
 
 # =============================
 # USER PARAMETERS (like the kernel submit)
 # =============================
-DATA_PATH="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_train.npy"
+DATA_PATH="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_train.npy"
 NUM_FEATURES=4
 MODEL_SEEDS=${SLURM_ARRAY_TASK_COUNT}   # ensemble size = number of array tasks (see --array above)
 
@@ -47,7 +47,7 @@ NUM_BLOCKS=8
 NUM_BINS=10
 NUM_LAYERS=6
 
-NFLOWS_DIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows"
+NFLOWS_DIR="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows"
 ESTIMATOR="${NFLOWS_DIR}/EstimationNFnflows.py"
 BASE_DIR="${NFLOWS_DIR}/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd"
 

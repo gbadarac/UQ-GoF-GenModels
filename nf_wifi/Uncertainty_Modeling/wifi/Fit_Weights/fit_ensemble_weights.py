@@ -37,7 +37,7 @@ def _t2np(t, dtype=np.float64):
 
 # ── Repo paths ────────────────────────────────────────────────────────────────
 THIS_DIR  = Path(__file__).resolve().parent   # .../Fit_Weights
-REPO_ROOT = THIS_DIR.parents[2]               # .../MonoJet_NPLM_analysis
+REPO_ROOT = THIS_DIR.parents[2]               # .../UQ-GoF-GenModels
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "shared" / "Sparker_utils"))
 sys.path.insert(0, str(REPO_ROOT / "Train_Ensembles" / "Train_Models"))
