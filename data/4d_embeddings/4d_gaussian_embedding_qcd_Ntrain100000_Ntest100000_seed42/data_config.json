@@ -5,5 +5,5 @@
   "seed": 42,
   "d": 4,
   "source": "4d_gaussian_embedding_data_JetClass QCD (ZJetsToNuNu_*.npz), first 4 dims, single-class, disjoint train/test split",
-  "data_dir": "/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/data/4d_gaussian_embedding_qcd_Ntrain100000_Ntest100000_seed42"
+  "data_dir": "/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/data/4d_gaussian_embedding_qcd_Ntrain100000_Ntest100000_seed42"
 }

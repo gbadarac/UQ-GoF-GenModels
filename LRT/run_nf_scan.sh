@@ -44,7 +44,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-REPO_ROOT="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
+REPO_ROOT="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels"
 SELECT="$REPO_ROOT/Uncertainty_Modeling/wifi/Fit_Weights/select_member_seeds.py"
 SELPY="/work/gbadarac/miniforge3/envs/nplm_env/bin/python"   # any python with numpy
 

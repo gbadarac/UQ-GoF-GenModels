@@ -53,7 +53,7 @@ def truth_2d(i, grid):
         return 0.5 * stats.norm.pdf(grid, -0.70, 0.12) + 0.5 * stats.norm.pdf(grid, -0.30, 0.12)
     return stats.skewnorm.pdf(grid, 8.0, loc=1.0, scale=0.75)
 
-# repo root = .../MonoJet_NPLM_analysis (three levels up: Fit_Weights -> wifi ->
+# repo root = .../UQ-GoF-GenModels (three levels up: Fit_Weights -> wifi ->
 # Uncertainty_Modeling -> repo root)
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 

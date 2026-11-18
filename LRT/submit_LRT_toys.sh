@@ -8,8 +8,8 @@
 #SBATCH --partition=qgpu,gpu
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
-#SBATCH -o /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/logs/%x-%A_%a.out
-#SBATCH -e /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/logs/%x-%A_%a.err
+#SBATCH -o /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/logs/%x-%A_%a.out
+#SBATCH -e /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/logs/%x-%A_%a.err
 # Resource defaults above are GPU (qgpu,gpu / gpu_gres / --gres=gpu:1) because NF (torch) needs
 # the GPU. KERNELS run on CPU (density eval is single-threaded numpy; a GPU would sit idle and
 # throttle the campaign to the cluster's ~16 GPUs). For a KERNELS run, OVERRIDE back to CPU:
@@ -93,7 +93,7 @@ W_COV_SCALE=${W_COV_SCALE:-1.0}     # [constrained] diagnostic scale on Sigma_w;
 # 4D: set Z_MODE=sample + (usually) FIX_WIFI_WEIGHTS=true; the null is self-built (SIR-from-q).
 
 # ─── Per-scenario paths (EDIT THESE) ─────────────────────────────────
-REPO_ROOT="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
+REPO_ROOT="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels"
 PY="$REPO_ROOT/LRT/LRT_rejnull.py"
 
 # defaults; the MODEL case sets env, each scenario overrides its paths (empties stay empty -> not passed)

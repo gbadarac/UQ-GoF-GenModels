@@ -10,10 +10,10 @@
 #SBATCH --gres=gpu:1
 
 
-#SBATCH --output=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm/logs/sparker_%A_%a.out
-#SBATCH --error=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm/logs/sparker_%A_%a.err
+#SBATCH --output=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm/logs/sparker_%A_%a.out
+#SBATCH --error=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm/logs/sparker_%A_%a.err
 
-mkdir -p /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm/logs
+mkdir -p /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm/logs
 
 # =============================
 # Activate environment
@@ -24,9 +24,9 @@ conda activate kernels_env
 # =============================
 # USER PARAMETERS (like NF)
 # =============================
-DATA_PATH="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_train.npy"
+DATA_PATH="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_train.npy"
 
-BASE_OUTDIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm"
+BASE_OUTDIR="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_gmm"
 mkdir -p "${BASE_OUTDIR}"
 
 # 4D-QCD with JOINT training: kernel COUNT was ruled out as the peak cause
@@ -40,7 +40,7 @@ N_MODELS=${SLURM_ARRAY_TASK_COUNT}
 # =============================
 # Run
 # =============================
-cd /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels
+cd /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels
 
 echo "SLURM job id: $SLURM_JOB_ID, array task: $SLURM_ARRAY_TASK_ID"
 echo "Running seed = $SLURM_ARRAY_TASK_ID"

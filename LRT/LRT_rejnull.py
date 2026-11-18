@@ -29,7 +29,7 @@ def _t2np(t):
 # Repo paths
 # -------------------------------------------------------------------
 THIS_DIR      = Path(__file__).resolve().parent          # .../LRT
-REPO_ROOT     = THIS_DIR.parent                           # .../MonoJet_NPLM_analysis
+REPO_ROOT     = THIS_DIR.parent                           # .../UQ-GoF-GenModels
 SPARKER_UTILS = REPO_ROOT / "shared" / "Sparker_utils"
 NF_UTILS      = REPO_ROOT / "Train_Ensembles" / "Train_Models"
 

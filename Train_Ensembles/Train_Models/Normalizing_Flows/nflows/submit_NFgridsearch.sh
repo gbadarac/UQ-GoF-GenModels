@@ -16,26 +16,26 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=24G
 #SBATCH --gres=gpu:1
-#SBATCH --output=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/gridsearch/logs/grid_%A_%a.out
-#SBATCH --error=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/gridsearch/logs/grid_%A_%a.err
+#SBATCH --output=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/gridsearch/logs/grid_%A_%a.out
+#SBATCH --error=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/gridsearch/logs/grid_%A_%a.err
 
 # =============================
 # Environment
 # =============================
 source /work/gbadarac/miniforge3/bin/activate
 conda activate nf_env
-export PYTHONPATH=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models:$PYTHONPATH
+export PYTHONPATH=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models:$PYTHONPATH
 
 # =============================
 # Fixed settings
 # =============================
-DATA_PATH="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_train.npy"
+DATA_PATH="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/data/4d_embeddings/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_train.npy"
 NUM_FEATURES=4
 LR=1e-5
 N_EPOCHS=1001
 BATCH_SIZE=512
 
-NFLOWS_DIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows"
+NFLOWS_DIR="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows"
 ESTIMATOR="${NFLOWS_DIR}/EstimationNFnflows.py"
 GRID_BASE="${NFLOWS_DIR}/EstimationNFnflows_outputs/4_dim/4d_embedding_qcd/gridsearch"
 

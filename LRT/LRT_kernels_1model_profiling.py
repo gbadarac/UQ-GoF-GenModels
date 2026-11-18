@@ -6,7 +6,7 @@ import numpy as np
 # Make Sparker_utils importable
 # -------------------------------------------------------------------
 THIS_DIR  = Path(__file__).resolve().parent    # .../LRT
-REPO_ROOT = THIS_DIR.parent                    # .../MonoJet_NPLM_analysis
+REPO_ROOT = THIS_DIR.parent                    # .../UQ-GoF-GenModels
 SPARKER_UTILS = REPO_ROOT / "shared" / "Sparker_utils"
 sys.path.insert(0, str(SPARKER_UTILS))
 

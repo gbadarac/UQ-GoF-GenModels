@@ -39,7 +39,7 @@ The pipeline has three components.
 ## 2. Repository layout
 
 ```text
-MonoJet_NPLM_analysis/
+UQ-GoF-GenModels/
 ├─ data/                                  # Shared inputs; self-reproducing generators
 │  ├─ 2d_gmm_toymodel/                    # 2D GMM+skew "heavy tail" target + generator
 │  └─ 4d_embeddings/                      # 4D embedding datasets (JetClass)
@@ -194,7 +194,7 @@ to a pointwise predictive band $\hat f \pm \sigma_{\hat f}$.
 
 #### Where
 ```bash 
-MonoJet_NPLM_analysis/Uncertainty_Modeling/wifi/Fit_Weights/
+UQ-GoF-GenModels/Uncertainty_Modeling/wifi/Fit_Weights/
 ```
 #### Python script
 - `fit_ensemble_weights.py` — unified script for both NF and kernel ensembles

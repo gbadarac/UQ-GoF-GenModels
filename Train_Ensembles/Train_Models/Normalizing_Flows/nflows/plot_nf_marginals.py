@@ -20,7 +20,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-REPO = "/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
+REPO = "/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels"
 sys.path.insert(0, os.path.join(REPO, "Train_Ensembles", "Train_Models"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils_flows import make_flow

@@ -8,8 +8,8 @@
 #SBATCH --account=gpu_gres
 #SBATCH --partition=qgpu,gpu
 #SBATCH --nodes=1
-#SBATCH -o /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/logs/%x-%A_%a.out
-#SBATCH -e /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/logs/%x-%A_%a.err
+#SBATCH -o /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/logs/%x-%A_%a.out
+#SBATCH -e /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/logs/%x-%A_%a.err
 
 set -euo pipefail
 
@@ -53,22 +53,22 @@ export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
 # -------------------------
 # Paths / config (EDIT THESE)
 # -------------------------
-REPO_ROOT="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis"
+REPO_ROOT="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels"
 PY="$REPO_ROOT/LRT/LRT_kernels_1model_profiling.py"
 
 # Train_Ensembles output with config.json + seed*/ histories
-MODEL_DIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_kernels_SparKer_models1_L5_K80_M300_Nboot100000_lr0.05_clip_10000000_joint_norm"
-#MODEL_DIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_kernels_SparKer_models60_L5_K75_M270_Nboot100000_lr0.05_clip_10000000_no_masking"
+MODEL_DIR="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/4_dim/4d_embedding_qcd/N_100000_dim_4_kernels_SparKer_models1_L5_K80_M300_Nboot100000_lr0.05_clip_10000000_joint_norm"
+#MODEL_DIR="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Sparker_kernels/EstimationKernels_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/N_100000_dim_2_kernels_SparKer_models60_L5_K75_M270_Nboot100000_lr0.05_clip_10000000_no_masking"
 
 # Which single model to use (0 -> seed000)
 MODEL_SEED=0
 
 # Output base
-OUT_BASE="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/kernels/4d_embedding_qcd_joint_norm"
-#OUT_BASE="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/kernels/2d_no_masking_control"
+OUT_BASE="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/kernels/4d_embedding_qcd_joint_norm"
+#OUT_BASE="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/kernels/2d_no_masking_control"
 
 mkdir -p "$OUT_BASE"
-mkdir -p /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/logs
+mkdir -p /work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/LRT/results/logs
 
 # -------------------------
 # Mode (EDIT THIS)
@@ -77,8 +77,8 @@ mkdir -p /work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/LRT/results/logs
 # CALIBRATION=0: loads target data from TARGET_DATA
 # Can be overridden at submit time: sbatch --export=ALL,CALIBRATION=0 ...
 CALIBRATION=${CALIBRATION:-1}
-TARGET_DATA="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/data/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_test.npy"
-#TARGET_DATA="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Generate_Data/saved_generated_target_data/2_dim/100k_2d_gaussian_heavy_tail_target_set.npy"
+TARGET_DATA="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/data/4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/data_test.npy"
+#TARGET_DATA="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Generate_Data/saved_generated_target_data/2_dim/100k_2d_gaussian_heavy_tail_target_set.npy"
 
 
 NTEST=100000

@@ -16,20 +16,20 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=4G
 #SBATCH --gres=gpu:1
-#SBATCH --output=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/logs/nf_%A_%a.out
-#SBATCH --error=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/logs/nf_%A_%a.err
+#SBATCH --output=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/logs/nf_%A_%a.out
+#SBATCH --error=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail/logs/nf_%A_%a.err
 
 # =============================
 # Activate environment
 # =============================
 source /work/gbadarac/miniforge3/bin/activate
 conda activate nf_env
-export PYTHONPATH=/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models:$PYTHONPATH
+export PYTHONPATH=/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models:$PYTHONPATH
 
 # =============================
 # USER PARAMETERS (2D: matches the git-recorded config the original 128 used)
 # =============================
-DATA_PATH="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_train.npy"
+DATA_PATH="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/data_train.npy"
 NUM_FEATURES=2
 MODEL_SEEDS=128   # HARDCODED pool label (NOT SLURM_ARRAY_TASK_COUNT) -> writes into the
                   # existing seeds_128 dir so 128..511 grow the pool in place to 512.
@@ -43,7 +43,7 @@ NUM_BLOCKS=4
 NUM_BINS=8
 NUM_LAYERS=4
 
-NFLOWS_DIR="/work/gbadarac/MonoJet_NPLM/MonoJet_NPLM_analysis/Train_Ensembles/Train_Models/Normalizing_Flows/nflows"
+NFLOWS_DIR="/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/Train_Ensembles/Train_Models/Normalizing_Flows/nflows"
 ESTIMATOR="${NFLOWS_DIR}/EstimationNFnflows.py"
 BASE_DIR="${NFLOWS_DIR}/EstimationNFnflows_outputs/2_dim/2d_bimodal_gaussian_heavy_tail"
 

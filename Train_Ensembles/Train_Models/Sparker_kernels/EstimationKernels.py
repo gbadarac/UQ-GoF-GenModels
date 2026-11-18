@@ -10,7 +10,7 @@ import torch
 # Make parent directory (Train_Models) importable, then import utilities
 # -------------------------------------------------------------------
 THIS_DIR = Path(__file__).resolve().parent          # .../Train_Models/Sparker_kernels
-REPO_ROOT = THIS_DIR.parents[2]                     # .../MonoJet_NPLM_analysis
+REPO_ROOT = THIS_DIR.parents[2]                     # .../UQ-GoF-GenModels
 sys.path.insert(0, str(REPO_ROOT / "shared"))
 
 from Sparker_utils.SPARKutils import *
