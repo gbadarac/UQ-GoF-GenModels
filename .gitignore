@@ -67,6 +67,5 @@ Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs
 Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs_outdated/
 
 # Paper appendix draft (local, not tracked)
-appendix/
-handoff_bundle/
-paper_style_bundle/
+paper_style_bundle/*
+!paper_style_bundle/paper_style.py
