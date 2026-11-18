@@ -1,10 +1,13 @@
-# Uncertainty-Aware Density Estimation and GoF with Normalizing Flows and Sparker Kernels
+# Uncertainty-aware density estimation and goodness-of-fit with normalizing flows
 
-End-to-end pipeline for:
-1) distributional modeling with Normalizing Flows,
-2) frequentist uncertainty with $w_i f_i$ ensembles
-   ([Benevedes & Thaler, 2025](https://arxiv.org/abs/2506.00113)),
-3) a learned one-sample goodness-of-fit likelihood–ratio test with calibration.
+This is the working pipeline for the normalizing-flow side of *An end-to-end framework for uncertainty-aware validation
+of generative models*: ensembles of normalizing flows, the w_i f_i weight fit with its sandwich covariance, and the
+goodness-of-fit test with point and Gaussian composite nulls. A Sparker-kernel density estimator is kept alongside as an
+alternative to the flows; it is not used in the paper.
+
+The paper's App. B code is a frozen copy of this pipeline, on the
+[`paper` branch](https://github.com/gbadarac/UQ-GoF-GenModels/tree/paper) (`nf_wifi/`). Changes made here are not
+carried over automatically.
 
 ---
 
@@ -12,12 +15,15 @@ End-to-end pipeline for:
 
 1. Overview
 2. Repository layout
-3. Environment
-4. Generate Data
-5. Step-by-step pipeline 
+3. Environments
+4. Data
+5. Step-by-step pipeline
    1. Step 1 — Train NF ensemble
    2. Step 2 — Fit $w$ and propagate uncertainty
    3. Step 3 — Learned one-sample GoF likelihood–ratio test
+6. Outputs and analysis
+7. Sparker kernels
+8. Running elsewhere
 
 ---
 
@@ -26,13 +32,18 @@ End-to-end pipeline for:
 The pipeline has three components.
 
 1. **Density estimation with Normalizing Flows**  
-   Ensemble of normalizing flows trained on bootstrap replicas and independent initializations to capture data and optimization variability.
+   Ensemble of normalizing flows trained on bootstrap replicas and independent initializations to capture data and
+   optimization variability. Ensembles of $M$ members are drawn from a pool of 512 flows.
 
 2. **Frequentist UQ with $w_i f_i$ ensembles**  
-   Weighted mixture $\hat f(x)=\sum_i \hat w_i f_i(x)$. Weights come from penalized MLE with a normalization constraint. Covariance of $\hat w$ via a sandwich estimator, propagated to a pointwise band $\hat f \pm \sigma_{\hat f}$.
+   Weighted mixture $\hat f(x)=\sum_i \hat w_i f_i(x)$. Weights come from maximum likelihood with a normalization
+   constraint ($\sum_i w_i = 1$; individual weights may be negative). Covariance of $\hat w$ via a sandwich estimator,
+   propagated to a pointwise band $\hat f \pm \sigma_{\hat f}$.
 
 3. **Learned one-sample GoF likelihood–ratio test**  
-   Uncertainty on $\hat w$ is propagated inside the test; null $H_\phi$ uses the ensemble with $w\sim\mathcal N(\hat w,\mathrm{Cov}(\hat w))$, the alternative adds a small Gaussian–mixture correction.
+   Uncertainty on $\hat w$ is propagated inside the test: the composite null profiles $w$ under the prior
+   $\mathcal N(\hat w,\mathrm{Cov}(\hat w))$, while the point null fixes $w=\hat w$. The alternative tilts the ensemble
+   multiplicatively, $f(x)\propto f_{\rm ens}(x;w)\,\exp\big(\sum_j b_j G_j(x)\big)$, with Gaussian kernels $G_j$.
 
 ---
 
@@ -42,250 +53,190 @@ The pipeline has three components.
 UQ-GoF-GenModels/
 ├─ data/                                  # Shared inputs; self-reproducing generators
 │  ├─ 2d_gmm_toymodel/                    # 2D GMM+skew "heavy tail" target + generator
-│  └─ 4d_embeddings/                      # 4D embedding datasets (JetClass)
+│  └─ 4d_embeddings/                      # 4D embedding datasets (JetClass): cache + held-out set
 ├─ Train_Ensembles/                       # Orchestration for NF ensembles (arrays, logs)
 │  └─ Train_Models/                       # Train individual ensemble members
+│     ├─ utils_flows.py                   # Flow construction, shared by every step
 │     ├─ Normalizing_Flows/               # NF training (nflows backend)
-│     │  └─ nflows/                       # nflows-based NF training
+│     │  └─ nflows/                       # nflows-based NF training, grid search, checks
 │     └─ Sparker_kernels/                 # Kernel-based density estimation
 ├─ Uncertainty_Modeling/                  # Weight fitting (w_i), sandwich covariance, propagation
 │  └─ wifi/                               # w_i f_i frequentist ensembles and covariance
-│     └─ Fit_Weights/                     # Penalized MLE for w, sandwich covariance, propagation
+│     ├─ utils_NF_wifi.py                 # NF ensemble evaluation, propagation, marginal plots
+│     ├─ utils_kernel_wifi.py             # Kernel-ensemble counterpart
+│     └─ Fit_Weights/                     # MLE for w, sandwich covariance, propagation
+│        ├─ select_member_seeds.py        # Draws the members of each ensemble choice
 │        ├─ fit_ensemble_weights.py       # Unified weight-fitting script (MODEL_TYPE toggle)
 │        └─ submit_fit_weights.sh         # SLURM submission (set MODEL_TYPE=nf|kernels)
 ├─ LRT/                                   # One-sample learned LRT with uncertainty-aware reference
 │  ├─ LRT_rejnull.py                      # Unified LRT script (--model_type kernels|nf)
-│  └─ submit_LRT_toys.sh                  # SLURM submission (set MODEL_TYPE=kernels|nf)
+│  ├─ submit_LRT_toys.sh                  # SLURM submission (set MODEL=kernels|nf)
+│  └─ run_nf_scan.sh                      # Submits the full NF campaign
 ├─ shared/                                # Shared library used across pipeline stages
 │  └─ Sparker_utils/                      # Kernel utilities (LRTGOFutils_v2, GENutils, SPARKutils, …)
 ├─ envs/                                  # Conda/pip environment files
-├─ NOTES.md                               # Design decisions and experimental observations
 └─ README.md
 ```
 
----
-
-## 3. Environment
-
-Create the environments:
-```bash
-conda env create -f envs/nf_env.yml
-conda env create -f envs/nplm_env.yml
-conda env create -f envs/kernels_env.yml
-```
-Activate the right one for each step:
-- Steps 1–2 (NF training, weight fitting):
-```bash
-conda activate nf_env
-```
-- Steps 1–2 (kernel training, weight fitting):
-```bash
-conda activate kernels_env
-```
-- Learned likelihood–ratio test (LRT):
-```bash
-conda activate nplm_env   # for NF backend
-conda activate kernels_env  # for kernel backend
-```
+Trained flows, fit results and test results are written inside this tree but are not tracked.
 
 ---
 
-## 4. Generate Data
+## 3. Environments
 
-This step creates the **2D target distribution** used across the pipeline. It lives
-alongside the data it produces, at seed 42.
+| Environment | Used for |
+|---|---|
+| `nf_env` | flow training and weight fits |
+| `nplm_env` | the test with flows; analysis and plots |
+| `kernels_env` | the Sparker-kernel pipeline; also works for analysis and plots |
 
-**Where:** `data/2d_gmm_toymodel/`  
-**Main script:** `generate_2d_gaussian_heavy_tail_target_data.py`  
-**Plotting notebook:** `plot_2d_gaussian_heavy_tail_target.ipynb`
+Create them with `conda env create -f envs/<name>.yml`. The SLURM scripts activate the right one themselves. Do not use
+`nf_env` for analysis: its scipy and numpy versions conflict.
 
-**Split convention**
-- `data_train` — sample the density model / kernel ensemble is fit on
-- `data_test`  — disjoint draw (seed + 1) the GoF/LRT is run against
-- default **100,000 / 100,000** train/test at seed 42
+---
 
-**Run**
+## 4. Data
+
+**2D toy.** `python generate_2d_gaussian_heavy_tail_target_data.py` (in `data/2d_gmm_toymodel/`) writes 100k training
+events (seed 42) and 100k test events (seed 43) to `2d_gmm_skew_Ntrain100000_Ntest100000_seed42/`, the same split Sean's
+`wifi_better_basis` pipeline uses. `plot_2d_gaussian_heavy_tail_target.ipynb` plots it. The toy has an analytic truth,
+so the test draws its observed sets fresh from it.
+
+**4D jets.** The raw input is a pool of 20 × 100k QCD jets (`ZJetsToNuNu_*.npz`) in
+`data/4d_embeddings/4d_embedding_data_JetClass/`, which is not tracked. In `data/4d_embeddings/`:
+
 ```bash
-cd data/2d_gmm_toymodel
-python generate_2d_gaussian_heavy_tail_target_data.py
+python make_qcd_cache.py --n_train 100000 --n_test 100000 --seed 42 \
+    --benchmark 4d_embedding_qcd --data-dir 4d_embedding_data_JetClass   # disjoint 100k/100k train/test split
+python carve_heldout_qcd.py                                               # data_heldout_qcd.npy: the ~1.9M events not used for training
 ```
 
-This creates a cache dir alongside the script:
-```text
-data/2d_gmm_toymodel/2d_gmm_skew_Ntrain100000_Ntest100000_seed42/
-├── data_train.npy
-├── data_test.npy
-└── data_config.json
-```
+Both write to `4d_embedding_qcd_Ntrain100000_Ntest100000_seed42/`. The test's observed sets are drawn from
+`data_heldout_qcd.npy`. Without `--benchmark` and `--data-dir`, `make_qcd_cache.py` builds the alternative
+`4d_gaussian_embedding_qcd` cache instead. `inspect_4d_embedding_qcd.py` makes inspection plots of an embedding.
 
 ---
 
 ## 5. Step-by-step pipeline
 
----
-
 ### 5.1 Step 1 — Train NF ensemble
 
-NF training uses the `nflows/` backend.
+Each array task of `submit_NFnflows_2d.sh` (2D) or `submit_NFnflows.sh` (4D) trains one flow with
+`EstimationNFnflows.py`. Its seed sets both the initialization and a bootstrap replica of `data_train.npy`; the replica
+is split 80/20 into training and validation, with early stopping after 10 epochs without improvement.
 
-The `nflows/` folder contains:
-- Training script: `EstimationNFnflows.py`
-- SLURM submission script: `submit_array_NFnflows.sh`
-- Launcher script: `run_submit_array_NFnflows.sh`
-
-NF shared helpers (model building, sampling, plotting):
-- `Train_Ensembles/Train_Models/utils_flows.py`
-
-Kernel shared utilities live in `shared/Sparker_utils/` (used across training, weight fitting, hit-or-miss, and LRT).
-
-#### Configure
-
-1) **How many models to train (ensemble size)**  
-Edit the SLURM array in the submission script:
-```bash
-#SBATCH --array=0-59   # trains 60 models: indices [0, 59]
-```
-
-2) **Architecture, data paths, output, seeds**  
-Edit the launcher script to set:
-- architecture: layers, blocks, hidden features, bins
-- data paths: where Step 4 saved the target dataset
-- ensemble size and seeds
-- output directory for logs and checkpoints
-
-#### Run
-Activate the environment for Steps 1–2, move into the backend, and submit:
 ```bash
 cd Train_Ensembles/Train_Models/Normalizing_Flows/nflows
-sbatch run_submit_array_NFnflows.sh
+sbatch submit_NFnflows_2d.sh     # or submit_NFnflows.sh for 4D
 ```
 
-#### Outputs
-After jobs finish you will find:
-```text
-Train_Ensembles/Train_Models/Normalizing_Flows/nflows/EstimationNFnflows_outputs/
-└── <one model_NNN/ folder per trained member>   # model.pth checkpoints, read directly downstream
-```
+| | 2D toy | 4D jets |
+|---|---|---|
+| layers, blocks, hidden, bins | 4, 4, 64, 8 | 6, 8, 128, 10 |
+| learning rate, batch size | 1e-5, 512 | 1e-5, 512 |
+| pool | 512 flows | 512 flows |
 
-#### Quick visual check
-Plot model vs target marginals for each member:
-```bash
-python Train_Ensembles/Train_Models/Normalizing_Flows/nflows/plot_nf_marginals.py --trial_dir <.../N_..._seeds_M_...>
-```
+Each pool lands in `EstimationNFnflows_outputs/<d>_dim/<dataset>/N_<N>_dim_<d>_seeds_<P>_<layers>_<blocks>_<hidden>_<bins>/`,
+with `architecture_config.json` and one `model_NNN/` per flow (`model.pth`, `info.json`, `losses.npz`). The `seeds_<P>`
+label is set in the submit script (`submit_NFnflows.sh` uses the array size, `submit_NFnflows_2d.sh` hardcodes it), so
+check it before training more flows into an existing pool.
 
-#### Typical settings
-- architecture: layers 4, blocks 16, hidden 128, bins 15
-- batch size 512, learning rate 5e-6, early stopping patience 10
-- ensemble size: 60 models
-
----
+`submit_NFgridsearch.sh` and `eval_gridsearch.py` rank candidate architectures by held-out NLL.
+`plot_nf_marginals.py --trial_dir <pool>` and `plot_nf_loss.py --trial_dir <pool>` are quick per-flow checks.
 
 ### 5.2 Step 2 — Fit $w$ and propagate uncertainty
 
-Form the weighted mixture $\hat f(x)=\sum_i w_i f_i(x)$ by fitting the ensemble
-weights $w$ with a penalized MLE under the normalization constraint. The step also
-computes the weight covariance (sandwich estimator) and propagates it
-to a pointwise predictive band $\hat f \pm \sigma_{\hat f}$.
+`submit_fit_weights.sh` (in `Uncertainty_Modeling/wifi/Fit_Weights/`) is a 10-task array. Task k is ensemble choice k:
+M flows drawn at random from the pool by `select_member_seeds.py --mode uniform --rng_seed k`, then fitted by
+`fit_ensemble_weights.py`. The fit keeps the density positive at every data point; the covariance is the sandwich
+estimator.
 
-#### Where
-```bash 
-UQ-GoF-GenModels/Uncertainty_Modeling/wifi/Fit_Weights/
-```
-#### Python script
-- `fit_ensemble_weights.py` — unified script for both NF and kernel ensembles
-
-#### Utilities
-- `Uncertainty_Modeling/wifi/utils_NF_wifi.py` — NF ensemble helpers (density eval, marginal plots, covariance propagation)
-- `Uncertainty_Modeling/wifi/utils_kernel_wifi.py` — kernel ensemble helpers (same interface)
-
-#### Submission script
-- `submit_fit_weights.sh` — set `MODEL_TYPE=nf|kernels` and `NDIM` at the top
-
-#### Outputs 
-- `results_fit_weights_NF/`
-- `results_fit_weights_kernel/`
-Each output folder contains the fitted weights `w_i_fitted.npy`, covariance matrix `cov_w.npy`, logs, and diagnostics.
-
-#### Configure
-
-1. Open `submit_fit_weights.sh` and set:
-   - `MODEL_TYPE`: `nf` or `kernels`
-   - `NDIM`: number of dimensions (e.g. `2` or `4`)
-   - For `MODEL_TYPE=nf`, optionally set `DATASET` (e.g. `2d_gaussian`)
-   - Paths (`TRIAL_DIR`, `DATA_PATH`) are set automatically from the toggles above
-2. Submit
-```bash 
+```bash
 cd Uncertainty_Modeling/wifi/Fit_Weights
-sbatch submit_fit_weights.sh
+sbatch --export=ALL,NDIM=2,N_WIFI=32 submit_fit_weights.sh   # MODEL_TYPE=nf|kernels, NDIM=2|4, N_WIFI=M, SELECTION=uniform
 ```
 
-The fitted weights `w_i_fitted.npy` are saved directly in the output folder and are ready for downstream steps. If optimization fails on some runs, check logs for non-finite losses and retry.
-
----
+With `N_WIFI=1` there is no fit: `plot_single_seed_marginal.py` plots the single flow without a band.
+`plot_10fit_aggregate.py` combines the 10 choices of each configuration into one marginal plot (median fit, Gaussian
+weight-uncertainty band).
 
 ### 5.3 Step 3 — Learned one-sample GoF likelihood–ratio test
 
-This step provides a one-sample goodness-of-fit hypothesis test based on a learned likelihood ratio. We report a Z score that quantifies how compatible the generated sample is with the target distribution.
+`LRT_rejnull.py` computes T = 2 (ℓ_NUM − ℓ_DEN) for one toy, with J Gaussian kernels G_j of width σ centred on the first
+J events of the toy.
+- **Point null:** w fixed at ŵ (`FIX_WIFI_WEIGHTS=true`). A single flow (`ENS=1`) always uses it.
+- **Composite null:** w profiled under the prior N(ŵ, Σ_w) (`FIX_WIFI_WEIGHTS=false`, the default).
+- **Null toys** (`CALIBRATION=1`): N_test events drawn from the ensemble by capped rejection sampling from the
+  equal-weight member mixture. For the composite null, w is first drawn from N(ŵ, Σ_w).
+- **Observed toys** (`CALIBRATION=0`): fresh draws from the analytic truth (2D), or draws from
+  `data_heldout_qcd.npy` (4D).
+- **Normalization:** estimated by importance sampling, with N_ref = N_test reference events.
 
-#### Common setup 
-- REF = density model, for example the fitted ensemble from Step 5.2, or a single NF.
-- DATA = target distribution sample
+`LRT/run_nf_scan.sh` submits the whole campaign through `submit_LRT_toys.sh`: 10 choices × N_test × {single flow,
+M = 32, M = 128} × {point, composite} × {null, observed}, with 100 null and 100 observed toys per choice. It only prints
+the `sbatch` commands unless `DRYRUN=0`.
 
-#### Test statistic, high level 
-Let $p_{\mathrm{REF}}$ be the reference density and $H_{\boldsymbol{\phi}}$ a flexible alternative that reduces to
-$p_{\mathrm{REF}}$ when $\boldsymbol{\phi}=0$.
-We learn the alternative from DATA and form a likelihood–ratio statistic
-$ T = -2\log\lambda = 2\big[\ell(\hat{\boldsymbol{\phi}}) - \ell(\boldsymbol{\phi}{=}0)\big]$, 
-where $\ell$ is the log likelihood on the DATA sample.
-We calibrate the null distribution of $T$ with pseudo-experiments drawn from the reference,
-convert the resulting $p$-value into a $Z$ score, and use $Z$ to summarize compatibility.
-
-#### Idea 
-- The reference enters in analytical form as an evaluable pdf $p_{\mathrm{REF}}(x)$, obtained from the ensemble with the $\hat{\boldsymbol w}$ uncertainty integrated as in Step 5.2.
-- The alternative adds a small, learnable correction $f(x,\boldsymbol{\phi})$ that integrates to zero so the result remains a valid density:
-$p(x \mid H_{\boldsymbol{\phi}}) = p_{\mathrm{REF}}(x) + f(x,\boldsymbol{\phi}),
-\qquad \int f(x,\boldsymbol{\phi})dx = 0$.
-- We fit $\boldsymbol{\phi}$ on DATA, build $T$, calibrate $T$ with toys drawn from $p_{\mathrm{REF}}$, then report $Z$.
-
-Both backends (NF and kernels) are handled by a single unified script under `LRT/`:
-
-#### Scripts
-- Python script: `LRT/LRT_rejnull.py` — handles both backends via `--model_type kernels|nf`
-- Submission script: `LRT/submit_LRT_toys.sh` — set `MODEL_TYPE` and `CALIBRATION` at the top
-
-#### Configure
-Open `submit_LRT_toys.sh` and set:
-- `MODEL_TYPE`: `kernels` or `nf`
-- `CALIBRATION`: `1` = null toys (capped rejection sampling from the ensemble), `0` = observed (target data)
-- `FIX_WIFI_WEIGHTS` / `FREE_WIFI_WEIGHTS`: optional flags to fix or free the wifi weights during the LRT
-- All paths (`W_PATH`, `W_COV_PATH`, `CALIB_DATA`, `TARGET_DATA`, and model-specific paths) are set automatically from the `MODEL_TYPE` toggle
-- SLURM array for number of toys, e.g. `#SBATCH --array=0-99` for 100 toys
-
-#### Run
 ```bash
 cd LRT
-# Edit MODEL_TYPE and CALIBRATION at the top of submit_LRT_toys.sh, then:
-sbatch submit_LRT_toys.sh
+DRYRUN=0 DIM=2d ./run_nf_scan.sh                 # 2D campaign (σ = 0.4)
+DRYRUN=0 DIM=4d SCAN=sigma ./run_nf_scan.sh      # 4D: σ scan on a single flow
+DRYRUN=0 DIM=4d SIGMA=0.53 ./run_nf_scan.sh      # 4D campaign at the chosen σ
 ```
-Run twice: once with `CALIBRATION=1` (null toys) and once with `CALIBRATION=0` (observed).
 
-#### Outputs
-Results are written under `LRT/results/<run_tag>/`.
-- `calibration/` (`CALIBRATION=1`) and `test/` (`CALIBRATION=0`) subfolders
-- Inside each, one folder per toy `seed{N}/` containing:
-  - `seed{N}_T.npy` — test-statistic value
-  - `seed{N}_coeffs.npy`, `seed{N}_kernel_centers.npy` — numerator Gaussian kernel correction
-  - `seed{N}_den_weights.npy`, `seed{N}_num_weights.npy`, `seed{N}_init_weights.npy` — WiFi weight diagnostics
+`CHOICES`, `NTEST_LIST`, `ENS_LIST`, `MODES` and `CALIBS` select a subset (see the script header).
 
-#### Analyse results (no SLURM needed — runs locally in a few seconds)
+**Settings used in the paper**
 
-**Main results** — T distribution, Z score, p-value, weight diagnostics:
+| Variable (`submit_LRT_toys.sh`) | Paper value | Meaning |
+|---|---|---|
+| `MODEL`, `SCENARIO` | `nf`, `ens_2d_uniform` / `ens_4d_uniform` | model type and dataset |
+| `ENS` | 1, 32, 128 | ensemble size M |
+| `CHOICE`, `MEMBER_SEEDS` | 0–9, from `choice<k>/member_seeds.txt` | ensemble choice and its flows (`run_nf_scan.sh` fills both) |
+| `N_KERNELS` | 500 | kernels J |
+| `KERNEL_SIGMA` | 0.4 (2D), 0.53 (4D) | kernel width σ in raw data units |
+| `LAM_PERT` | 1 | ridge λ on the tilt coefficients |
+| `CLIP_B` | 3 | box \|b_j\| ≤ A |
+| `N_REF` | N_test | reference events for the normalization |
+| `TOYS_PER_JOB`, `N_TOYS` | — | toys per array task (memory and job-count setting) |
+
+---
+
+## 6. Outputs and analysis
+
+- **Weight fits:** `Uncertainty_Modeling/wifi/Fit_Weights/results_fit_weights_NF_uniform/<2d_toymodel|4d_embedding>/<pool>_<dataset>_ensemblecomponents<M>/choice<k>/`
+  holds `member_seeds.txt` (tracked), `w_i_fitted.npy` (M weights), `cov_w.npy` ((M−1) × (M−1)), `loss_history.npy`
+  and plots.
+- **Test:** `LRT/results/nf/<2d|4d>_uniform_ensemble/choice<k>/<run_tag>/{calibration,test}/seed<N>/` holds
+  `seed<N>_T.npy` (the statistic) and fit diagnostics (`seed<N>_fit_report.json`, tilt coefficients, kernel centres,
+  fitted weights). The run tag encodes every setting, e.g. `NF_Nens128_Ntest100000_M500_W0.4_..._composite_null`, and
+  is the same across the 10 choices so that they can be pooled.
+
 ```bash
-conda activate kernels_env   # use kernels_env for both NF and kernel results — nf_env has a scipy/numpy conflict
-python LRT/analyse_LRT_output.py \
-    --results_dir LRT/results/<run_tag> \
-    --dof 100 \
-    --clip_tau 0.0005 \
-    [--w_cov_path <path/to/cov_w.npy>]   # optional: adds normalised weight-pull plot
+python LRT/analyse_LRT_output.py --results_dir <run_tag dir> [--dof <n>] [--w_cov_path <cov_w.npy>]   # one configuration
+python LRT/plot_pvalue_vs_ntest.py --base <results dir(s)> --out <fig.pdf>                            # median p-value vs N_test
+python LRT/plot_pvalue_ladder_paper.py --dim 2d                                                       # paper figure, pooled over the 10 choices
+python LRT/plot_Tdist_vs_ntest.py --base <results dir>                                                # null vs observed T
 ```
-Produces `T_distribution.pdf/png`, `weight_shifts.pdf/png`, `chi2_quantile_table.txt` (and optionally `weight_pulls.pdf/png`) under `LRT/results/<run_tag>/plots/`.
+
+---
+
+## 7. Sparker kernels
+
+The kernel pipeline is kept but not used in the paper; only its 2D training outputs are on disk.
+- **Training:** `Train_Ensembles/Train_Models/Sparker_kernels/submit_SparkerKernels.sh` runs `EstimationKernels.py` as a
+  128-member array on the 2D toy, into `EstimationKernels_outputs/2_dim/2d_gmm/`.
+- **Weights:** `submit_fit_weights.sh` with `MODEL_TYPE=kernels`.
+- **Test:** `submit_LRT_toys.sh` with `MODEL=kernels` and `SCENARIO=1model_2d` or `ens_2d`. `LRT/run_lrt_scan.sh` drives
+  the 2D scan and `LRT/make_pvalue_plots.sh` plots it.
+- **Single-model test:** `LRT/LRT_kernels_1model_profiling.py` (with `submit_LRT_kernels_1model_profiling_toys.sh`)
+  tests one kernel model by profiling the weights of its internal components instead of ensemble members.
+
+---
+
+## 8. Running elsewhere
+
+The SLURM scripts are the drivers used on the ETH Zürich T3 cluster and contain its absolute paths. Before running
+elsewhere, set:
+- `REPO_ROOT` and the other `/work/gbadarac/MonoJet_NPLM/UQ-GoF-GenModels/...` paths;
+- the conda paths (`/work/gbadarac/miniforge3`);
+- the `#SBATCH` log paths, account and partition.
